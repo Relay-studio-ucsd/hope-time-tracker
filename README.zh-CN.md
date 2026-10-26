@@ -10,16 +10,18 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dan9574/hope-time-tracker/releases"><img src="https://img.shields.io/github/v/release/dan9574/hope-time-tracker?include_prereleases&style=flat-square" alt="Release" /></a>
-  <a href="https://github.com/dan9574/hope-time-tracker/releases"><img src="https://img.shields.io/github/downloads/dan9574/hope-time-tracker/total?style=flat-square" alt="Downloads" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/dan9574/hope-time-tracker?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/Relay-studio-ucsd/hope-time-tracker/releases"><img src="https://img.shields.io/github/v/release/Relay-studio-ucsd/hope-time-tracker?include_prereleases&style=flat-square" alt="Release" /></a>
+  <a href="https://github.com/Relay-studio-ucsd/hope-time-tracker/releases"><img src="https://img.shields.io/github/downloads/Relay-studio-ucsd/hope-time-tracker/total?style=flat-square" alt="Downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Relay-studio-ucsd/hope-time-tracker?style=flat-square" alt="License" /></a>
 </p>
+
+<p align="center">由 <a href="https://github.com/dan9574">@dan9574</a> 创建并维护 · <a href="https://github.com/Relay-studio-ucsd">Relay Studio UCSD</a></p>
 
 ---
 
 ## 下载之前
 
-- **现在可用：macOS 和 Windows。** 安装包在 [Releases](https://github.com/dan9574/hope-time-tracker/releases)。安装包暂未签名，第一次打开多一步：macOS 右键 `Hope.app` → **打开**；Windows 在 SmartScreen 提示里点 **更多信息 → 仍要运行**。没有有效期。
+- **现在可用：macOS 和 Windows。** 安装包在 [Releases](https://github.com/Relay-studio-ucsd/hope-time-tracker/releases)。安装包暂未签名，第一次打开多一步：macOS 右键 `Hope.app` → **打开**；Windows 在 SmartScreen 提示里点 **更多信息 → 仍要运行**。没有有效期。
 - **暂不提供：iPhone 和 Apple Watch。** 两个 app 都已经做出来、在我们自己的设备上跑着（下面有截图），但**还没上 App Store**，前端和后端也还在继续开发，所以目前只发桌面版。
 - **Android：** 暂不支持，除非后续有人提需求。
 

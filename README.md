@@ -10,16 +10,18 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dan9574/hope-time-tracker/releases"><img src="https://img.shields.io/github/v/release/dan9574/hope-time-tracker?include_prereleases&style=flat-square" alt="Release" /></a>
-  <a href="https://github.com/dan9574/hope-time-tracker/releases"><img src="https://img.shields.io/github/downloads/dan9574/hope-time-tracker/total?style=flat-square" alt="Downloads" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/dan9574/hope-time-tracker?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/Relay-studio-ucsd/hope-time-tracker/releases"><img src="https://img.shields.io/github/v/release/Relay-studio-ucsd/hope-time-tracker?include_prereleases&style=flat-square" alt="Release" /></a>
+  <a href="https://github.com/Relay-studio-ucsd/hope-time-tracker/releases"><img src="https://img.shields.io/github/downloads/Relay-studio-ucsd/hope-time-tracker/total?style=flat-square" alt="Downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Relay-studio-ucsd/hope-time-tracker?style=flat-square" alt="License" /></a>
 </p>
+
+<p align="center">Created and maintained by <a href="https://github.com/dan9574">@dan9574</a> · <a href="https://github.com/Relay-studio-ucsd">Relay Studio UCSD</a></p>
 
 ---
 
 ## Before you download
 
-- **Available now: macOS and Windows.** Get the installer from [Releases](https://github.com/dan9574/hope-time-tracker/releases). The builds are not code-signed yet, so the first launch takes one extra step: on macOS, right-click `Hope.app` → **Open**; on Windows, click **More info → Run anyway** on the SmartScreen dialog. There is no expiry.
+- **Available now: macOS and Windows.** Get the installer from [Releases](https://github.com/Relay-studio-ucsd/hope-time-tracker/releases). The builds are not code-signed yet, so the first launch takes one extra step: on macOS, right-click `Hope.app` → **Open**; on Windows, click **More info → Run anyway** on the SmartScreen dialog. There is no expiry.
 - **Not available yet: iPhone and Apple Watch.** Both apps exist and run on our own devices (you can see them below), but they are **not on the App Store yet**. The front end and the back end are still being developed, so for now Hope ships on the desktop only.
 - **Android:** not planned, unless people ask for it.
 
