@@ -1,27 +1,39 @@
 import SwiftUI
 
+/// The four iPhone tabs. Today and Settings are real screens; Statistics and
+/// Activities are placeholders until those pages are built.
 struct RootTabView: View {
     var body: some View {
         TabView {
-            TodayView()
-                .tabItem {
-                    Label("Today", systemImage: "clock")
-                }
+            Tab("Today", systemImage: "clock") {
+                TodayView()
+            }
+            Tab("Statistics", systemImage: "chart.bar") {
+                PlaceholderTab(title: "Statistics", systemImage: "chart.bar")
+            }
+            Tab("Activities", systemImage: "list.bullet") {
+                PlaceholderTab(title: "Activities", systemImage: "list.bullet")
+            }
+            Tab("Settings", systemImage: "gearshape") {
+                SettingsView()
+            }
+        }
+    }
+}
 
-            Text("Statistics coming soon")
-                .tabItem {
-                    Label("Statistics", systemImage: "chart.bar")
-                }
+/// A tab that is not built yet: the same large title and grouped background as
+/// the real tabs, with a system empty state in the middle.
+private struct PlaceholderTab: View {
+    let title: LocalizedStringKey
+    let systemImage: String
 
-            Text("Activity management coming soon")
-                .tabItem {
-                    Label("Activities", systemImage: "list.bullet")
+    var body: some View {
+        NavigationStack {
+            List {}
+                .overlay {
+                    ContentUnavailableView("Coming soon", systemImage: systemImage)
                 }
-
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape")
-                }
+                .navigationTitle(title)
         }
     }
 }

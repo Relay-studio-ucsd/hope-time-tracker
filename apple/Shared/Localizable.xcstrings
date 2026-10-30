@@ -51,16 +51,6 @@
         }
       }
     },
-    "Activity management coming soon" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "活动管理功能即将上线"
-          }
-        }
-      }
-    },
     "Activity name" : {
       "localizations" : {
         "zh-Hans" : {
@@ -187,6 +177,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "颜色"
+          }
+        }
+      }
+    },
+    "Coming soon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将上线"
           }
         }
       }
@@ -720,16 +720,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "统计"
-          }
-        }
-      }
-    },
-    "Statistics coming soon" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "统计功能即将上线"
           }
         }
       }
