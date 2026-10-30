@@ -5,7 +5,6 @@ import SwiftUI
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var showPicker = false
-    @State private var showAccount = false
 
     var body: some View {
         let store = model.store
@@ -33,14 +32,6 @@ struct TodayView: View {
                 }
             }
             .navigationTitle("Today")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAccount = true } label: {
-                        Image(systemName: "person.crop.circle")
-                    }
-                    .accessibilityLabel(Text("Account"))
-                }
-            }
             .refreshable { model.sync.syncNow() }
         }
         .sheet(isPresented: $showPicker) {
@@ -49,7 +40,6 @@ struct TodayView: View {
                 showPicker = false
             }
         }
-        .sheet(isPresented: $showAccount) { AccountView() }
         .alert(
             "Something went wrong", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })
         ) {

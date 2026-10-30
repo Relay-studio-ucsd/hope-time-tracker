@@ -27,7 +27,7 @@ struct HopeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TodayView()
+            RootTabView()
                 .environment(model)
                 .environment(watch)
                 .environment(away)
