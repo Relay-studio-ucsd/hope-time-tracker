@@ -1,7 +1,7 @@
 # Apple Store 发布：issue 草稿（按人分三类）
 
 - **A 类**：ipo（@IpoKlay）。**B 类**：Jerry（@yren3861）。**C 类**：Daniel（@dan9574）要做、或要给反馈的事。
-- 仓库：`Relay-studio-ucsd/hope-time-tracker`。
+- 仓库：`Relay-studio-ucsd/hope-time-tracker`，issue #1–#18；main 受保护，改动走分支 + PR。
 - 两条线前四条都是手机页面，**只要 Mac + Xcode 模拟器**，不需要 iPhone 或 Apple Watch。
 - 手表和离开提醒的真机任务放在两条线最后，谁有设备谁做；没有就跳过交给另一人。
 - 顺序排过，同一时间两人不改同一个文件。前一条合并再开下一条。**A1 与 B1 今天就能开工。**
@@ -153,16 +153,16 @@
 - 买域名；Resend 或 Brevo 配发件域（DNS 记录）；Supabase → Auth → SMTP 填入。
 - 邮件模板 Confirm signup / Reset password 改为显示 `{{ .Token }}`（6 位码）。
 - Auth 设置：最短密码 8；验证码有效期 10 分钟；重发间隔 60 秒；每小时发信上限。
-- 顺手：SQL Editor 跑 `supabase/schema.sql` 末尾的 `add column if not exists`，重推本地课表组与带假期的计划。
+- 顺手：SQL Editor 跑 `supabase/schema.sql` 末尾的 `add column if not exists`（阶段 10 的 `kind` / `skip_dates` 和阶段 12 的 `session.break_ack_ms`），重推本地课表组与带假期的计划。
 
 验收：新邮箱走一遍"注册 → 收到 6 位码"；写进 `supabase/README.md`。B4 联调要它。
 
-## C3. 文档：rebuild-plan 第 15、16 节、4.3.1 修订、CLAUDE.md 当前状态
+## C3. 文档：rebuild-plan 第 16、17 节、4.3.1 修订、CLAUDE.md 当前状态
 
-- 第 15 节「iPhone v1」：四个 Tab 与每页内容；今天按起床 / 睡觉日；不做日程页；Live Activity 与小组件延后。
+- 第 16 节「iPhone v1」（第 15 节已是阶段 12 休息提醒）：四个 Tab 与每页内容；今天按起床 / 睡觉日；不做日程页；Live Activity 与小组件延后。
 - 4.3.1：主题改为三套完整配色，活动 8 色不变。
-- 第 16 节「账号体系」：6 位验证码、忘记密码、删除账号、最短密码、限流。
-- CLAUDE.md：阶段 11 已真机使用，去掉"未验证"；已知问题归 B5 / B6。
+- 第 17 节「账号体系」：6 位验证码、忘记密码、删除账号、最短密码、限流。
+- CLAUDE.md「当前状态」加一段：App Store 发布计划见 `docs/issues-draft.md`，已知手表问题归 B5 / B6。
 - 隐私政策页放到新域名，链接给 B3。
 
 （可以让 Claude 写，你过目。）
@@ -179,7 +179,7 @@ B1 贴出三张截图后，选定或要求改色值。
 
 - App Privacy 声明（邮箱、位置、使用数据）；定位用途文案中英。
 - 审核演示账号；App Store Connect 不勾中国大陆。
-- 版本号 2.0.0（规则写进 `apple/README.md`）。
+- 版本号已是 2.0.0（`apple/Config/Base.xcconfig`，build 号 `CURRENT_PROJECT_VERSION` 每次上传 +1）；发版时推 `v2.0.0` tag 触发桌面出包。
 - TestFlight 上传；iPhone 与 Watch 截图。
 
 依赖：B3、B4。
