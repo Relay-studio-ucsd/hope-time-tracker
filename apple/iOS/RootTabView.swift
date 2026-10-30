@@ -5,14 +5,14 @@ import SwiftUI
 struct RootTabView: View {
     var body: some View {
         TabView {
-            Tab("Today", systemImage: "clock") {
+            Tab("Today", systemImage: "sun.max") {
                 TodayView()
             }
             Tab("Statistics", systemImage: "chart.bar") {
                 PlaceholderTab(title: "Statistics", systemImage: "chart.bar")
             }
-            Tab("Activities", systemImage: "list.bullet") {
-                PlaceholderTab(title: "Activities", systemImage: "list.bullet")
+            Tab("Activities", systemImage: "circle.square") {
+                PlaceholderTab(title: "Activities", systemImage: "circle.square")
             }
             Tab("Settings", systemImage: "gearshape") {
                 SettingsView()
