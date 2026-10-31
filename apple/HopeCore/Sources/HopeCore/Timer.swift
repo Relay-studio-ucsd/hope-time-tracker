@@ -332,12 +332,11 @@ extension LocalStore {
         return DaySummary(totalMs: total, scheduleMs: scheduleTotal, entries: entries)
     }
 
-    /// Today as the calendar day containing `now`.
+    /// Today as lived — wake-up to bedtime, the small hours included — not the calendar day (`DayRules`).
     public func todaySummary(
         now: Int64? = nil, calendar: Calendar = .current, includeSchedule: Bool = false
     ) -> DaySummary {
         let now = now ?? self.now
-        let range = Self.dayRange(of: Date(timeIntervalSince1970: Double(now) / 1000), calendar: calendar)
-        return summary(from: range.from, to: range.to, now: now, includeSchedule: includeSchedule)
+        return daySummary(on: livedToday(now: now, calendar: calendar), now: now, calendar: calendar, includeSchedule: includeSchedule)
     }
 }

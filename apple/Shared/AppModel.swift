@@ -1,6 +1,11 @@
 import HopeCore
 import SwiftUI
 
+/// The iPhone's tabs (the watch has none).
+enum RootTab: Hashable {
+    case today, statistics, activities, settings
+}
+
 /// The app's single source of truth: the local store, sync, and the timer actions both apps offer.
 @MainActor
 @Observable
@@ -9,6 +14,10 @@ final class AppModel {
     let sync: SyncService
     /// The last failed action, shown as an alert.
     var failure: String?
+    /// The iPhone tab on screen.
+    var tab: RootTab = .today
+    /// The day the Today tab shows, 'YYYY-MM-DD'; `nil` = today as lived (rebuild-plan 10 E).
+    var viewedDay: String?
 
     init() {
         let store: LocalStore
@@ -35,6 +44,19 @@ final class AppModel {
 
     func createActivity(name: String, color: ActivityColor) {
         perform { try store.createActivity(name: name, color: color) }
+    }
+
+    /// Shows a day on the Today tab, like a day tapped in the desktop's week or month view.
+    func openDay(_ key: String) {
+        viewedDay = key
+        tab = .today
+    }
+
+    /// The person picked a tab. Picking Today — again, or from another tab — lands on today as lived; only
+    /// `openDay` carries a past day across (the desktop's sidebar does the same).
+    func selectTab(_ tab: RootTab) {
+        if tab == .today { viewedDay = nil }
+        self.tab = tab
     }
 }
 

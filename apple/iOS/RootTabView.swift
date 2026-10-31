@@ -2,19 +2,27 @@ import SwiftUI
 
 /// The four iPhone tabs. Today and Settings are real screens; Statistics and
 /// Activities are placeholders until those pages are built.
+///
+/// The selection lives in `AppModel`, so another tab can open a day on Today
+/// (`openDay`). Going through `selectTab` rather than binding the property
+/// directly lets a tap on the tab already shown (which sets the same value)
+/// bring Today back to today.
 struct RootTabView: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
-        TabView {
-            Tab("Today", systemImage: "sun.max") {
+        let selection = Binding(get: { model.tab }, set: { model.selectTab($0) })
+        TabView(selection: selection) {
+            Tab("Today", systemImage: "sun.max", value: .today) {
                 TodayView()
             }
-            Tab("Statistics", systemImage: "chart.bar") {
+            Tab("Statistics", systemImage: "chart.bar", value: .statistics) {
                 PlaceholderTab(title: "Statistics", systemImage: "chart.bar")
             }
-            Tab("Activities", systemImage: "circle.square") {
+            Tab("Activities", systemImage: "circle.square", value: .activities) {
                 PlaceholderTab(title: "Activities", systemImage: "circle.square")
             }
-            Tab("Settings", systemImage: "gearshape") {
+            Tab("Settings", systemImage: "gearshape", value: .settings) {
                 SettingsView()
             }
         }
