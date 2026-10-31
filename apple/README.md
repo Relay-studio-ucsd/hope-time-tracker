@@ -35,7 +35,9 @@ swift test
 Runs on macOS, no simulator needed. Covers the sync engine against an in-memory fake server (a port of
 `src-tauri/src/sync/fake.rs`: two devices converge, offline edits, delete vs edit, one running session,
 idempotent pull, pagination, the 50-sequence overlap), the GoTrue/PostgREST request shapes, token refresh,
-the timer rules, the duration formats and the complication snapshot.
+the timer rules, the wake-up / bedtime day rules (`HopeCore/DayRules.swift`, the port of the desktop's
+`src/lib/useToday.ts`: the small hours belong to the day that has not gone to sleep, a day's records run from
+last night's bedtime to its own), the duration formats and the complication snapshot.
 
 ## Signing (once per machine)
 

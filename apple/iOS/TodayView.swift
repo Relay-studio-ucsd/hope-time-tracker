@@ -13,7 +13,9 @@ struct TodayView: View {
         NavigationStack {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let now = Int64(context.date.timeIntervalSince1970 * 1000)
-                let today = store.todaySummary(now: now)
+                // The day another tab opened (`AppModel.openDay`), else today as lived (rebuild-plan 10 E).
+                let day = model.viewedDay.flatMap { DayRules.date(of: $0) } ?? store.livedToday(now: now)
+                let today = store.daySummary(on: day, now: now)
                 List {
                     Section {
                         VStack(alignment: .leading, spacing: 4) {
