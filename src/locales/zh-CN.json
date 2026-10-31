@@ -82,7 +82,8 @@
     "total": "已记录",
     "empty": "今天还没有记录",
     "now": "现在",
-    "schedule": "上课 {{duration}}"
+    "schedule": "上课 {{duration}}",
+    "emptyPast": "这天没有记录"
   },
   "timer": {
     "start": "开始计时",
@@ -117,7 +118,8 @@
     "thisMonth": "回到本月",
     "byActivity": "按活动",
     "empty": "这段时间没有记录",
-    "unspecified": "未细分"
+    "unspecified": "未细分",
+    "today": "回到今天"
   },
   "activities": {
     "add": "新建活动",
@@ -174,7 +176,8 @@
   },
   "journal": {
     "title": "今天的日记",
-    "placeholder": "写点什么…"
+    "placeholder": "写点什么…",
+    "titlePast": "这天的日记"
   },
   "errors": {
     "overlap": "这段时间和另一条记录重叠了。请先调整那条记录。",

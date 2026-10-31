@@ -53,6 +53,12 @@ export function dateKey(date: Date): string {
   return `${date.getFullYear()}-${m}-${d}`;
 }
 
+/** Local midnight of a 'YYYY-MM-DD' key (the inverse of `dateKey`). */
+export function fromDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y!, m! - 1, d!);
+}
+
 /** Epoch ms for an 'HH:MM' clock time on the given local day; null if malformed. */
 export function atClock(day: Date, hm: string): number | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(hm);
@@ -120,7 +126,7 @@ export function formatClock(ms: number, locale: string): string {
 }
 
 /** "Last week", "3 months ago" … in the user's locale, capitalized for use as a title. */
-export function relativePeriod(offset: number, unit: "week" | "month", locale: string): string {
+export function relativePeriod(offset: number, unit: "day" | "week" | "month", locale: string): string {
   const text = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(offset, unit);
   return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
 }

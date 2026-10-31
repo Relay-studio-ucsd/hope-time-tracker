@@ -9,7 +9,7 @@ import {
   useIncludeSchedule,
 } from "./preferences";
 import { summarizeDay } from "./stats";
-import { atClock, dateKey, DAY, dayRange, shiftDays } from "./time";
+import { atClock, dateKey, DAY, dayRange, fromDateKey, shiftDays } from "./time";
 
 /** The button under the ring (rebuild-plan 10 E). */
 export type DayButton = { kind: "wake"; date: string } | { kind: "sleep"; date: string } | { kind: "undo"; day: Day } | null;
@@ -31,8 +31,11 @@ const clock = (day: Date, hm: string | null | undefined, fallback: string) =>
  * "Today" as the person lives it: one day runs from wake-up to bedtime, so the small hours belong to
  * the day that has not gone to sleep yet. Until the midpoint between the default bedtime and the next
  * default wake-up (03:00 with the 23:00 / 07:00 defaults), an unclosed yesterday is still "today".
+ *
+ * With `dayKey`, a past day instead: the same shape, but no wake/sleep button, and a day that never
+ * recorded a bedtime closes at the default one (rebuild-plan 10 E) instead of running on to now.
  */
-export function useToday(now: number) {
+export function useToday(now: number, dayKey: string | null = null) {
   const wakeHm = useSetting(PREF.wake);
   const sleepHm = useSetting(PREF.sleep);
   const wakeUntilHm = useSetting(PREF.wakeButtonUntil);
@@ -42,9 +45,13 @@ export function useToday(now: number) {
   const cal = new Date(now);
   const calKey = dateKey(cal);
   const yesterday = new Date(shiftDays(cal.getTime(), -1));
+  const browsed = dayKey === null ? null : fromDateKey(dayKey);
+  // Rows from two days before the browsed day (its own and the night before) up to today, so the
+  // lived-day rule below can still look at today and yesterday.
+  const earliest = browsed !== null && browsed.getTime() < cal.getTime() ? browsed : cal;
   const days = useQuery(
-    () => commands.dayList({ from: dateKey(new Date(shiftDays(cal.getTime(), -2))), to: calKey }),
-    [calKey],
+    () => commands.dayList({ from: dateKey(new Date(shiftDays(earliest.getTime(), -2))), to: calKey }),
+    [calKey, dayKey],
   );
   const dayOf = (key: string) => days?.find((d) => d.date === key);
 
@@ -61,7 +68,10 @@ export function useToday(now: number) {
   const yesterdaySlept = yDay?.sleep_ms != null && yDay.sleep_ms <= now;
   const stillYesterday = now < nightMidpoint && calDay?.wake_ms == null && !yesterdaySlept;
 
-  const today = stillYesterday ? yesterday : cal;
+  const lived = stillYesterday ? yesterday : cal;
+  const livedKey = dateKey(lived);
+  const browsing = browsed !== null && dateKey(browsed) !== livedKey;
+  const today = browsed !== null && browsing ? browsed : lived;
   const key = dateKey(today);
   const day = dayOf(key);
   const prev = dayOf(dateKey(new Date(shiftDays(today.getTime(), -1))));
@@ -79,11 +89,12 @@ export function useToday(now: number) {
   if (wakeMs !== null && wakeMs > defaultWake) sleepSegments.push({ startMs: defaultWake, endMs: wakeMs });
   if (sleepMs !== null && sleepMs < defaultSleep) sleepSegments.push({ startMs: sleepMs, endMs: defaultSleep });
 
-  // Records of this day: after last night's bedtime, until tonight's (or now, or midnight).
+  // Records of this day: after last night's bedtime, until tonight's. Today runs on to now (or
+  // midnight); a past day with no bedtime recorded closes at the default one.
   const calendar = dayRange(today);
   const range = {
     from_ms: Math.max(calendar.from_ms, prev?.sleep_ms ?? 0),
-    to_ms: Math.max(calendar.to_ms, sleepMs ?? now),
+    to_ms: Math.max(calendar.to_ms, sleepMs ?? (browsing ? defaultSleep : now)),
   };
   const sessions = useQuery(() => commands.sessionList(range), [range.from_ms, range.to_ms]);
   const activities = useQuery(() => commands.activityList(true), []);
@@ -92,7 +103,7 @@ export function useToday(now: number) {
   const lastNightMs = wakeMs !== null && prev?.sleep_ms != null ? wakeMs - prev.sleep_ms : null;
 
   let button: DayButton = null;
-  if (days !== undefined) {
+  if (days !== undefined && !browsing) {
     if (stillYesterday) {
       button = { kind: "sleep", date: key };
     } else if (wakeMs === null && now < clock(today, wakeUntilHm, DEFAULT_WAKE_BUTTON_UNTIL)) {
@@ -107,6 +118,10 @@ export function useToday(now: number) {
   return {
     today,
     key,
+    /** True when `dayKey` points at a day other than today as lived. */
+    browsing,
+    /** Today as lived, even while browsing; ‹ › on the Today page step relative to it. */
+    livedKey,
     day,
     summary,
     /** Whether timetable time is in `summary.totalMs` (the setting); `summary.scheduleMs` has it either way. */

@@ -92,3 +92,14 @@
   color: var(--accent-text);
   font-weight: 600;
 }
+
+/* Past days open on the Today page: the column darkens on hover, and the label is a button so the
+   keyboard reaches it. Today's column keeps its accent. */
+.bars-col.is-open:not(.is-highlight):hover .bars-value,
+.bars-col.is-open:not(.is-highlight):hover .bars-label {
+  color: var(--fg);
+}
+
+button.bars-label {
+  border-radius: var(--r-sm);
+}

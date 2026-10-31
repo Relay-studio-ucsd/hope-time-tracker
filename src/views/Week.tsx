@@ -13,9 +13,10 @@ export function Week() {
   const { t, i18n } = useTranslation();
   const offset = useUi((s) => s.weekOffset);
   const setOffset = useUi((s) => s.setWeekOffset);
+  const openDay = useUi((s) => s.openDay);
 
   const days = weekDays(addWeeks(new Date(), offset));
-  const { perDay, totals, todayKey, activities, includeSchedule, scheduleMs } = usePeriod(days);
+  const { now, perDay, totals, todayKey, activities, includeSchedule, scheduleMs } = usePeriod(days);
   const group = scheduleGroup(activities);
   const totalMs = totals.reduce((sum, a) => sum + a.ms, 0);
 
@@ -34,7 +35,7 @@ export function Week() {
       <p className="period-total">
         <Duration ms={totalMs} />
       </p>
-      <Bars days={perDay} label={(d) => weekday.format(d)} highlightKey={todayKey} />
+      <Bars days={perDay} label={(d) => weekday.format(d)} highlightKey={todayKey} now={now} onOpenDay={openDay} />
       <ActivitySummary
         totals={totals}
         scheduleMs={includeSchedule ? 0 : scheduleMs}

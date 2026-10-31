@@ -13,6 +13,7 @@ export function Month() {
   const { t, i18n } = useTranslation();
   const offset = useUi((s) => s.monthOffset);
   const setOffset = useUi((s) => s.setMonthOffset);
+  const openDay = useUi((s) => s.openDay);
 
   const month = addMonths(new Date(), offset);
   const days = monthDays(month);
@@ -33,7 +34,7 @@ export function Month() {
       <p className="period-total">
         <Duration ms={totalMs} />
       </p>
-      <MonthCalendar days={perDay} weekdays={weekdays} todayKey={todayKey} now={now} />
+      <MonthCalendar days={perDay} weekdays={weekdays} todayKey={todayKey} now={now} onOpenDay={openDay} />
       <ActivitySummary
         totals={totals}
         scheduleMs={includeSchedule ? 0 : scheduleMs}
