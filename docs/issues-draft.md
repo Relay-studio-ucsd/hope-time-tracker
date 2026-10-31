@@ -1,7 +1,7 @@
 # Apple Store 发布：issue 草稿（按人分三类）
 
 - **A 类**：ipo（@IpoKlay）。**B 类**：Jerry（@yren3861）。**C 类**：Daniel（@dan9574）要做、或要给反馈的事。
-- 仓库：`Relay-studio-ucsd/hope-time-tracker`，issue #1–#18；main 受保护，改动走分支 + PR。
+- 仓库：`Relay-studio-ucsd/hope-time-tracker`，issue #1–#18，C7 是 #22（PR 占了中间的编号）；main 受保护，改动走分支 + PR。
 - 两条线前四条都是手机页面，**只要 Mac + Xcode 模拟器**，不需要 iPhone 或 Apple Watch。
 - 手表和离开提醒的真机任务放在两条线最后，谁有设备谁做；没有就跳过交给另一人。
 - 顺序排过，同一时间两人不改同一个文件。前一条合并再开下一条。**A1 与 B1 今天就能开工。**
@@ -45,16 +45,19 @@
 - 顶部圆环：今日总时长，按活动色分段，排除课表组（`todaySummary`，与桌面同规则）。
 - 计时卡：开始 / 暂停 / 继续 / 结束 / 换活动（现有逻辑搬过来）。
 - 今日记录列表：色点、活动名、起止、时长、等宽数字。
-- "今天"按起床 / 睡觉日（`day` 表），与桌面一致。
+- "今天"按起床 / 睡觉日（`day` 表），与桌面一致：规则由 C7 放进 HopeCore，这里只调用 `daySummary(on:)`，不要自己再算。
+- **能翻到之前的天**（对照桌面 PR #21）：导航栏 ‹ ›，一次一天，不能翻到未来；不在今天时标题改成相对日期（昨天 / 前天 / 3 天前，`Date.RelativeFormatStyle`），并出现「回到今天」；再点一次「今天」Tab 也回到今天。
+- 过去的天只看那天的记录：隐藏计时卡，空状态写「这天没有记录」。左右滑切天是加分项。
 
-涉及：`apple/iOS/TodayView.swift`、`apple/Shared/Components.swift`。
-依赖：A2。
+涉及：`apple/iOS/TodayView.swift`、`apple/Shared/Components.swift`；用 C7 的「正在看的那天」。
+依赖：A2、C7。
 
 ## A4. 记录编辑
 
 - 今日列表左滑删除；点开改起止时间与备注；右上角「补录」。
 - 三种都要确认对话框。
 - 用 `HopeCore/Editing.swift` 已有的 `editSession` / `addSession` / `deleteSession`。
+- 改 / 删 / 补录都作用在 A3 里正在看的那天，不只是今天；补录的默认日期就是那天。编辑器要有日期选择，能把记录挪到别的天（桌面编辑器已有）。周三记错、周五才发现，就是这条要解决的场景。
 
 涉及：`apple/iOS/TodayView.swift`、新建 `SessionEditor.swift`。
 依赖：A3。
@@ -99,9 +102,10 @@
 - 分段控件：本周 / 本月；上一段 / 下一段。
 - 每活动一行：色点、名字、时长、占比条（不用图表库）；点进看该区间的记录。
 - 排除课表组，受「总时长计入课表」设置影响。
+- 本周 / 本月里要有按天的元素可以点：本周一天一列，本月一个月历格子（日期 + 当天总时长，像桌面本月页）。点一下切到「今天」Tab 并定位到那天（用 C7 的选中状态）；未来的天不响应。对照桌面 PR #21。
 
-涉及：新建 `apple/iOS/StatsView.swift`；`HopeCore/Timer.swift` 的 `summary(from:to:)`。
-依赖：B1、A1（挂到「统计」Tab）。
+涉及：新建 `apple/iOS/StatsView.swift`；`HopeCore/Timer.swift` 的 `summary(from:to:)`；跳转用 C7 的 `openDay`。
+依赖：B1、A1（挂到「统计」Tab）、C7。
 
 ## B3. 设置页补全
 
@@ -159,7 +163,7 @@
 
 ## C3. 文档：rebuild-plan 第 16、17 节、4.3.1 修订、CLAUDE.md 当前状态
 
-- 第 16 节「iPhone v1」（第 15 节已是阶段 12 休息提醒）：四个 Tab 与每页内容；今天按起床 / 睡觉日；不做日程页；Live Activity 与小组件延后。
+- 第 16 节「iPhone v1」（第 15 节已是阶段 12 休息提醒）：四个 Tab 与每页内容；今天按起床 / 睡觉日；今天页可翻看过去的天、本周 / 本月点一天直达（桌面 PR #21 为参考实现，规则见 C7）；不做日程页；Live Activity 与小组件延后。
 - 4.3.1：主题改为三套完整配色，活动 8 色不变。
 - 第 17 节「账号体系」：6 位验证码、忘记密码、删除账号、最短密码、限流。
 - CLAUDE.md「当前状态」加一段：App Store 发布计划见 `docs/issues-draft.md`，已知手表问题归 B5 / B6。
@@ -183,3 +187,13 @@ B1 贴出三张截图后，选定或要求改色值。
 - TestFlight 上传；iPhone 与 Watch 截图。
 
 依赖：B3、B4。
+
+## C7. 手机看过去的天的底层：HopeCore 起床 / 睡觉日规则 + Tab 选中状态
+
+桌面已能翻看过去的天（PR #21）。手机端 A3 / A4 / B2 都要用同一套规则和同一个「正在看的那天」，先把这两块铺好，三条 issue 只管界面。
+
+- HopeCore：把桌面 `src/lib/useToday.ts` 的规则移植成纯函数并补 `swift test`：凌晨归属（默认睡觉与次日默认起床的中点之前仍算前一天）；一天的范围 = 前一天 `sleep_ms` → 当天 `sleep_ms`，今天没睡算到 now，过去的天没按过睡觉按默认睡觉时间收尾；`daySummary(on:now:)` 取代按自然日的 `todaySummary`。
+- `RootTabView`：`TabView(selection:)`；`AppModel` 里加「正在看的那天」（nil = 今天）和 `openDay(_:)`，统计页调一下就能跳到今天页的某天；再点「今天」Tab 回到今天。
+
+涉及：`HopeCore/Timer.swift`（或新文件 `DayRules.swift`）、`apple/iOS/RootTabView.swift`、`apple/iOS/HopeApp.swift`。
+依赖：无；A3、B2 依赖它。（可以让 Claude 写，你过目。）
