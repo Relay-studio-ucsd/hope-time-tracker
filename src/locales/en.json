@@ -82,7 +82,8 @@
     "total": "Tracked",
     "empty": "Nothing tracked yet",
     "now": "now",
-    "schedule": "Classes {{duration}}"
+    "schedule": "Classes {{duration}}",
+    "emptyPast": "Nothing tracked that day"
   },
   "timer": {
     "start": "Start Timer",
@@ -117,7 +118,8 @@
     "thisMonth": "This Month",
     "byActivity": "By Activity",
     "empty": "Nothing tracked in this period",
-    "unspecified": "Other"
+    "unspecified": "Other",
+    "today": "Today"
   },
   "activities": {
     "add": "New Activity",
@@ -175,7 +177,8 @@
   },
   "journal": {
     "title": "Today's Journal",
-    "placeholder": "Write something…"
+    "placeholder": "Write something…",
+    "titlePast": "Journal"
   },
   "errors": {
     "overlap": "This overlaps another record. Adjust that one first.",

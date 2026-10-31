@@ -4,6 +4,7 @@ import { History, Plus } from "lucide-react";
 import { Duration } from "../components/Duration";
 import { Journal } from "../components/Journal";
 import { Page } from "../components/Page";
+import { PeriodNav } from "../components/PeriodNav";
 import { PlanEditor } from "../components/PlanEditor";
 import { RecordEditor } from "../components/RecordEditor";
 import { Ring, type RingSegment } from "../components/Ring";
@@ -14,9 +15,10 @@ import { activityName, liveActivities } from "../lib/activity";
 import { autoLogs, occurrencesOn } from "../lib/plans";
 import { useRingWidth } from "../lib/preferences";
 import { ringRecords, type DayEntry } from "../lib/stats";
-import { dateKey, formatClock, formatDuration } from "../lib/time";
+import { DAY, dateKey, dayRange, formatClock, formatDuration, fromDateKey, relativePeriod, shiftDays } from "../lib/time";
 import { useNow } from "../lib/useNow";
 import { useToday, utcOffsetMin } from "../lib/useToday";
+import { useUi } from "../stores/ui";
 import { DayTimeEditor } from "../components/DayTimeEditor";
 import "./Today.css";
 
@@ -31,10 +33,17 @@ export function Today() {
   const { t, i18n } = useTranslation();
   const timer = useQuery(() => commands.sessionCurrent(), []);
   const now = useNow(timer?.running ? 1000 : 30_000);
-  const day = useToday(now);
-  const { today, summary, activities, loaded, wakeMs, sleepMs, includeSchedule, scheduleMs } = day;
+  const dayKey = useUi((s) => s.dayKey);
+  const setDayKey = useUi((s) => s.setDayKey);
+  const day = useToday(now, dayKey);
+  const { today, summary, activities, loaded, wakeMs, sleepMs, includeSchedule, scheduleMs, browsing } = day;
   const ringWidth = useRingWidth();
   const [editing, setEditing] = useState<Editing>(null);
+
+  // Days back from today as lived: ‹ › step it one day at a time, the current-period button clears it.
+  const lived = fromDateKey(day.livedKey);
+  const offset = Math.round((dayRange(today).from_ms - dayRange(lived).from_ms) / DAY);
+  const setOffset = (o: number) => setDayKey(o >= 0 ? null : dateKey(new Date(shiftDays(lived.getTime(), o))));
 
   const key = dateKey(today);
   const plans = useQuery(() => commands.planList({ from: key, to: key }), [key]);
@@ -78,7 +87,11 @@ export function Today() {
   };
 
   return (
-    <Page title={t("nav.today")} subtitle={subtitle}>
+    <Page
+      title={browsing ? relativePeriod(offset, "day", i18n.language) : t("nav.today")}
+      subtitle={subtitle}
+      accessory={<PeriodNav offset={offset} onChange={setOffset} currentLabel={t("period.today")} />}
+    >
       <section className="today-ring">
         <Ring
           wakeMs={wakeMs}
@@ -98,7 +111,7 @@ export function Today() {
           <span className="today-total">
             <Duration ms={summary.totalMs} />
           </span>
-          <span className="today-total-label">{day.slept ? t("day.rested") : t("today.total")}</span>
+          <span className="today-total-label">{day.slept && !browsing ? t("day.rested") : t("today.total")}</span>
         </Ring>
         {/* Timetable time left out of the total still gets a quiet line of its own (rebuild-plan 13.4). */}
         {!includeSchedule && scheduleMs > 0 && (
@@ -136,7 +149,7 @@ export function Today() {
       </div>
 
       {loaded && summary.entries.length === 0 && occurrences.length === 0 ? (
-        <p className="today-empty">{t("today.empty")}</p>
+        <p className="today-empty">{browsing ? t("today.emptyPast") : t("today.empty")}</p>
       ) : (
         <Timeline
           entries={summary.entries}
@@ -147,7 +160,7 @@ export function Today() {
         />
       )}
 
-      <Journal date={key} />
+      <Journal date={key} past={browsing} />
 
       {editing?.kind === "plan" && (
         <PlanEditor plan={editing.plan} date={today} activities={activities ?? []} onClose={() => setEditing(null)} />

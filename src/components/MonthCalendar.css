@@ -35,6 +35,17 @@
   font-weight: 600;
 }
 
+/* Past days open on the Today page: a hover wash, and the date is a button so the keyboard reaches it. */
+.calendar-day.is-open:hover {
+  background: var(--mat-hover);
+}
+
+button.calendar-date {
+  align-self: flex-start;
+  text-align: left;
+  border-radius: var(--r-sm);
+}
+
 .calendar-day.is-future .calendar-date {
   color: var(--fg-3);
 }

@@ -12,10 +12,12 @@ interface Props {
   weekdays: string[];
   todayKey: string;
   now: number;
+  /** Opens a day on the Today page; future days stay inert. */
+  onOpenDay?: (key: string) => void;
 }
 
 /** Month grid, Monday first: date, the day's total, and a thin bar scaled to the month's busiest day. */
-export function MonthCalendar({ days, weekdays, todayKey, now }: Props) {
+export function MonthCalendar({ days, weekdays, todayKey, now, onOpenDay }: Props) {
   const { t } = useTranslation();
   const hoverKey = useUi((s) => s.hoverKey);
   const setHoverKey = useUi((s) => s.setHoverKey);
@@ -43,10 +45,20 @@ export function MonthCalendar({ days, weekdays, todayKey, now }: Props) {
       ))}
       {days.map((d) => {
         const future = d.date.getTime() > now;
-        const classes = ["calendar-day", d.key === todayKey && "is-today", future && "is-future"].filter(Boolean).join(" ");
+        const open = !future && onOpenDay ? () => onOpenDay(d.key) : undefined;
+        const classes = ["calendar-day", d.key === todayKey && "is-today", future && "is-future", open && "is-open"]
+          .filter(Boolean)
+          .join(" ");
         return (
-          <div key={d.key} className={classes}>
-            <span className="calendar-date tabular">{d.date.getDate()}</span>
+          // The whole cell takes the click; the date is a button so the keyboard reaches it too.
+          <div key={d.key} className={classes} onClick={open}>
+            {open ? (
+              <button type="button" className="calendar-date tabular">
+                {d.date.getDate()}
+              </button>
+            ) : (
+              <span className="calendar-date tabular">{d.date.getDate()}</span>
+            )}
             <span className="calendar-total tabular">{d.totalMs > 0 ? formatDuration(d.totalMs) : ""}</span>
             {tooltip?.day === d.key && <span className="chart-tooltip calendar-tooltip">{tooltip.text}</span>}
             {!future && (
