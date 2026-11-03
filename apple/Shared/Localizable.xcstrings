@@ -101,6 +101,46 @@
         }
       }
     },
+    "Archive" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档"
+          }
+        }
+      }
+    },
+    "Archive Activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档活动"
+          }
+        }
+      }
+    },
+    "Archive Activity?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要归档此活动吗？"
+          }
+        }
+      }
+    },
+    "Archived" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已归档"
+          }
+        }
+      }
+    },
     "Blue" : {
       "localizations" : {
         "zh-Hans" : {
@@ -634,6 +674,16 @@
         }
       }
     },
+    "Restore" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复"
+          }
+        }
+      }
+    },
     "Resume" : {
       "localizations" : {
         "zh-Hans" : {
@@ -820,6 +870,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "青"
+          }
+        }
+      }
+    },
+    "The activity and its sub-activities will be hidden from activity selection. Existing records will be kept. Unsaved edits will be discarded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此活动及其子活动将从活动选择列表中隐藏。已有记录会保留。未保存的修改将被丢弃。"
           }
         }
       }

@@ -8,6 +8,7 @@ struct ActivityEditor: View {
     @State private var name: String
     @State private var color: ActivityColor
     @State private var failure: String?
+    @State private var showArchiveConfirmation = false
 
     init(activity: ActivityRecord) {
         self.activity = activity
@@ -33,6 +34,12 @@ struct ActivityEditor: View {
                     }
                 }
             }
+            Section {
+                Button("Archive Activity") {
+                    showArchiveConfirmation = true
+                }
+                .disabled(model.store.isScheduled(activityId: activity.id))
+            }
         }
         .navigationTitle("Edit Activity")
         .toolbar {
@@ -51,6 +58,16 @@ struct ActivityEditor: View {
                 .disabled(trimmed.isEmpty || model.store.isScheduled(activityId: activity.id))
             }
         }
+        .confirmationDialog(
+            "Archive Activity?",
+            isPresented: $showArchiveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Archive") { archive() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The activity and its sub-activities will be hidden from activity selection. Existing records will be kept. Unsaved edits will be discarded.")
+        }
         .alert("Something went wrong", isPresented: Binding(
             get: { failure != nil },
             set: { if !$0 { failure = nil } }
@@ -60,5 +77,15 @@ struct ActivityEditor: View {
             Text(verbatim: failure ?? "")
         }
     }
+
+    private func archive() {
+        do {
+            try model.store.setActivityArchived(activity.id, archived: true)
+            dismiss()
+        } catch {
+            failure = String(describing: error)
+        }
+    }
+
 }
 

@@ -6,6 +6,8 @@ struct ActivitiesView: View {
     @State private var showNewActivity = false
     @State private var editingActivity: ActivityRecord?
     @State private var parentForNewActivity: ActivityRecord?
+    @State private var archivedTree: [ActivityNode] = []
+    @State private var showArchived = false
 
     var body: some View {
         let _ = model.store.revision
@@ -26,9 +28,26 @@ struct ActivitiesView: View {
                         }
                     }
                 }
+                if !archivedTree.isEmpty {
+                    Section {
+                        DisclosureGroup("Archived", isExpanded: $showArchived) {
+                            ForEach(archivedTree) { node in
+                                archivedRow(node.activity)
+                                ForEach(node.children) { child in
+                                    ActivityLabel(
+                                        name: child.name,
+                                        color: model.store.color(activityId: child.id)
+                                    )
+                                    .foregroundStyle(.secondary)
+                                    .padding(.leading, 16)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .overlay {
-                if tree.isEmpty {
+                if tree.isEmpty && archivedTree.isEmpty {
                     ContentUnavailableView(
                         "No activities yet",
                         systemImage: "circle.square"
@@ -45,6 +64,9 @@ struct ActivitiesView: View {
                     }
                 }
             }
+        }
+        .onChange(of: model.store.revision, initial: true) { _, _ in
+            loadArchived()
         }
         .sheet(isPresented: $showNewActivity) {
             NavigationStack {
@@ -73,6 +95,36 @@ struct ActivitiesView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(verbatim: model.failure ?? "")
+        }
+    }
+
+    private func loadArchived() {
+        do {
+            archivedTree = try model.store.archivedActivityTree()
+        } catch {
+            model.failure = String(describing: error)
+        }
+    }
+
+    private func archivedRow(_ activity: ActivityRecord) -> some View {
+        HStack {
+            ActivityLabel(
+                name: model.store.displayName(activityId: activity.id) ?? activity.name,
+                color: model.store.color(activityId: activity.id)
+            )
+            .foregroundStyle(.secondary)
+            Spacer()
+            if !model.store.isScheduled(activityId: activity.id) {
+                Button("Restore") {
+                    do {
+                        try model.store.setActivityArchived(activity.id, archived: false)
+                    } catch {
+                        model.failure = String(describing: error)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint(Text(verbatim: activity.name))
+            }
         }
     }
 
