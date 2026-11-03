@@ -393,6 +393,16 @@
         }
       }
     },
+    "New Sub-activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建子活动"
+          }
+        }
+      }
+    },
     "Next reminder at %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -540,6 +550,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "橙"
+          }
+        }
+      }
+    },
+    "Parent activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "父活动"
           }
         }
       }

@@ -5,6 +5,7 @@ struct ActivitiesView: View {
     @Environment(AppModel.self) private var model
     @State private var showNewActivity = false
     @State private var editingActivity: ActivityRecord?
+    @State private var parentForNewActivity: ActivityRecord?
 
     var body: some View {
         let _ = model.store.revision
@@ -14,14 +15,14 @@ struct ActivitiesView: View {
             List {
                 ForEach(tree) { node in
                     if node.children.isEmpty {
-                        activityButton(node.activity)
+                        parentRow(node.activity)
                     } else {
                         DisclosureGroup {
                             ForEach(node.children) { child in
                                 activityButton(child)
                             }
                         } label: {
-                            activityButton(node.activity)
+                            parentRow(node.activity)
                         }
                     }
                 }
@@ -57,6 +58,11 @@ struct ActivitiesView: View {
                 ActivityEditor(activity: activity)
             }
         }
+        .sheet(item: $parentForNewActivity) { parent in
+            NavigationStack {
+                NewSubactivityView(parent: parent)
+            }
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(
@@ -67,6 +73,25 @@ struct ActivitiesView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(verbatim: model.failure ?? "")
+        }
+    }
+
+    private func parentRow(_ activity: ActivityRecord) -> some View {
+        HStack {
+            activityButton(activity)
+            if activity.parentId == nil && !model.store.isScheduled(activityId: activity.id) {
+                Button {
+                    parentForNewActivity = activity
+                } label: {
+                    Image(systemName: "plus")
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.primary)
+                .accessibilityLabel("New Sub-activity")
+                .accessibilityHint(Text(verbatim: activity.name))
+            }
         }
     }
 
