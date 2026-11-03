@@ -4,6 +4,7 @@ import SwiftUI
 struct ActivitiesView: View {
     @Environment(AppModel.self) private var model
     @State private var showNewActivity = false
+    @State private var editingActivity: ActivityRecord?
 
     var body: some View {
         let _ = model.store.revision
@@ -13,23 +14,14 @@ struct ActivitiesView: View {
             List {
                 ForEach(tree) { node in
                     if node.children.isEmpty {
-                        ActivityLabel(
-                            name: node.activity.name,
-                            color: node.activity.palette
-                        )
+                        activityButton(node.activity)
                     } else {
                         DisclosureGroup {
                             ForEach(node.children) { child in
-                                ActivityLabel(
-                                    name: child.name,
-                                    color: node.activity.palette
-                                )
+                                activityButton(child)
                             }
                         } label: {
-                            ActivityLabel(
-                                name: node.activity.name,
-                                color: node.activity.palette
-                            )
+                            activityButton(node.activity)
                         }
                     }
                 }
@@ -60,6 +52,11 @@ struct ActivitiesView: View {
                 }
             }
         }
+        .sheet(item: $editingActivity) { activity in
+            NavigationStack {
+                ActivityEditor(activity: activity)
+            }
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(
@@ -72,4 +69,18 @@ struct ActivitiesView: View {
             Text(verbatim: model.failure ?? "")
         }
     }
+
+    private func activityButton(_ activity: ActivityRecord) -> some View {
+        Button {
+            editingActivity = activity
+        } label: {
+            ActivityLabel(name: activity.name, color: model.store.color(activityId: activity.id))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.primary)
+        .disabled(model.store.isScheduled(activityId: activity.id))
+    }
+
 }
