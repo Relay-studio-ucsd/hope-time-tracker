@@ -34,10 +34,7 @@ struct ActivitiesView: View {
                             ForEach(archivedTree) { node in
                                 archivedRow(node.activity)
                                 ForEach(node.children) { child in
-                                    ActivityLabel(
-                                        name: child.name,
-                                        color: model.store.color(activityId: child.id)
-                                    )
+                                    activityLabel(child)
                                     .foregroundStyle(.secondary)
                                     .padding(.leading, 16)
                                 }
@@ -108,9 +105,8 @@ struct ActivitiesView: View {
 
     private func archivedRow(_ activity: ActivityRecord) -> some View {
         HStack {
-            ActivityLabel(
-                name: model.store.displayName(activityId: activity.id) ?? activity.name,
-                color: model.store.color(activityId: activity.id)
+            activityLabel(
+                activity, name: model.store.displayName(activityId: activity.id)
             )
             .foregroundStyle(.secondary)
             Spacer()
@@ -147,11 +143,35 @@ struct ActivitiesView: View {
         }
     }
 
+    private func activityLabel(_ activity: ActivityRecord, name: String? = nil) -> some View {
+        HStack {
+            ActivityLabel(
+                name: name ?? activity.name,
+                color: model.store.color(activityId: activity.id)
+            )
+            if model.store.isScheduled(activityId: activity.id) {
+                Label("Schedule", systemImage: "graduationcap")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.quaternary, in: Capsule())
+            } else if model.store.isExercise(activityId: activity.id) {
+                Label("Exercise", systemImage: "figure.run")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.quaternary, in: Capsule())
+            }
+        }
+    }
+
     private func activityButton(_ activity: ActivityRecord) -> some View {
         Button {
             editingActivity = activity
         } label: {
-            ActivityLabel(name: activity.name, color: model.store.color(activityId: activity.id))
+            activityLabel(activity)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }

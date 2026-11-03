@@ -321,12 +321,52 @@
         }
       }
     },
+    "Exercise" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动"
+          }
+        }
+      }
+    },
+    "Exercise activities do not trigger away reminders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动类活动不会触发离开提醒。"
+          }
+        }
+      }
+    },
+    "Exercise activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动类活动"
+          }
+        }
+      }
+    },
     "Exercise and the timetable are not reminded." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "运动类和课表不提醒。"
+          }
+        }
+      }
+    },
+    "Exercise status follows the parent activity." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动属性跟随父活动。"
           }
         }
       }
@@ -700,6 +740,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
+          }
+        }
+      }
+    },
+    "Schedule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "课表"
           }
         }
       }

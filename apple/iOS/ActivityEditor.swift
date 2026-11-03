@@ -7,6 +7,7 @@ struct ActivityEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var color: ActivityColor
+    @State private var isExercise: Bool
     @State private var failure: String?
     @State private var showArchiveConfirmation = false
 
@@ -14,6 +15,7 @@ struct ActivityEditor: View {
         self.activity = activity
         _name = State(initialValue: activity.name)
         _color = State(initialValue: activity.palette)
+        _isExercise = State(initialValue: activity.isExercise)
     }
 
     private var trimmed: String {
@@ -34,6 +36,18 @@ struct ActivityEditor: View {
                     }
                 }
             }
+            if activity.parentId == nil {
+                Section {
+                    Toggle("Exercise activity", isOn: $isExercise)
+                } footer: {
+                    Text("Exercise activities do not trigger away reminders.")
+                }
+            } else {
+                Section {
+                    Text("Exercise status follows the parent activity.")
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section {
                 Button("Archive Activity") {
                     showArchiveConfirmation = true
@@ -49,7 +63,10 @@ struct ActivityEditor: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     do {
-                        try model.store.updateActivity(activity.id, name: trimmed, color: color)
+                        try model.store.updateActivity(
+                            activity.id, name: trimmed, color: color,
+                            isExercise: activity.parentId == nil ? isExercise : nil
+                        )
                         dismiss()
                     } catch {
                         failure = String(describing: error)
