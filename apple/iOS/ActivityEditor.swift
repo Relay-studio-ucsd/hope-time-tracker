@@ -1,0 +1,108 @@
+import HopeCore
+import SwiftUI
+
+struct ActivityEditor: View {
+    let activity: ActivityRecord
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var color: ActivityColor
+    @State private var isExercise: Bool
+    @State private var failure: String?
+    @State private var showArchiveConfirmation = false
+
+    init(activity: ActivityRecord) {
+        self.activity = activity
+        _name = State(initialValue: activity.name)
+        _color = State(initialValue: activity.palette)
+        _isExercise = State(initialValue: activity.isExercise)
+    }
+
+    private var trimmed: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        Form {
+            TextField("Activity name", text: $name)
+            if activity.parentId == nil {
+                Picker("Color", selection: $color) {
+                    ForEach(ActivityColor.allCases, id: \.self) { item in
+                        HStack {
+                            ActivityDot(color: item)
+                            Text(item.localizedName)
+                        }
+                        .tag(item)
+                    }
+                }
+            }
+            if activity.parentId == nil {
+                Section {
+                    Toggle("Exercise activity", isOn: $isExercise)
+                } footer: {
+                    Text("Exercise activities do not trigger away reminders.")
+                }
+            } else {
+                Section {
+                    Text("Exercise status follows the parent activity.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                Button("Archive Activity") {
+                    showArchiveConfirmation = true
+                }
+                .disabled(model.store.isScheduled(activityId: activity.id))
+            }
+        }
+        .navigationTitle("Edit Activity")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    do {
+                        try model.store.updateActivity(
+                            activity.id, name: trimmed, color: color,
+                            isExercise: activity.parentId == nil ? isExercise : nil
+                        )
+                        dismiss()
+                    } catch {
+                        failure = String(describing: error)
+                    }
+                }
+                .disabled(trimmed.isEmpty || model.store.isScheduled(activityId: activity.id))
+            }
+        }
+        .confirmationDialog(
+            "Archive Activity?",
+            isPresented: $showArchiveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Archive") { archive() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The activity and its sub-activities will be hidden from activity selection. Existing records will be kept. Unsaved edits will be discarded.")
+        }
+        .alert("Something went wrong", isPresented: Binding(
+            get: { failure != nil },
+            set: { if !$0 { failure = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(verbatim: failure ?? "")
+        }
+    }
+
+    private func archive() {
+        do {
+            try model.store.setActivityArchived(activity.id, archived: true)
+            dismiss()
+        } catch {
+            failure = String(describing: error)
+        }
+    }
+
+}
+

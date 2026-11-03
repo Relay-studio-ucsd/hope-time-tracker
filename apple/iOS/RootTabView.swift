@@ -20,7 +20,7 @@ struct RootTabView: View {
                 PlaceholderTab(title: "Statistics", systemImage: "chart.bar")
             }
             Tab("Activities", systemImage: "circle.square", value: .activities) {
-                PlaceholderTab(title: "Activities", systemImage: "circle.square")
+                ActivitiesView()
             }
             Tab("Settings", systemImage: "gearshape", value: .settings) {
                 SettingsView()

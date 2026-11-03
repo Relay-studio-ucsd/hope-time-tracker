@@ -101,6 +101,46 @@
         }
       }
     },
+    "Archive" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档"
+          }
+        }
+      }
+    },
+    "Archive Activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档活动"
+          }
+        }
+      }
+    },
+    "Archive Activity?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要归档此活动吗？"
+          }
+        }
+      }
+    },
+    "Archived" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已归档"
+          }
+        }
+      }
+    },
     "Blue" : {
       "localizations" : {
         "zh-Hans" : {
@@ -241,6 +281,16 @@
         }
       }
     },
+    "Edit Activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑活动"
+          }
+        }
+      }
+    },
     "Email" : {
       "localizations" : {
         "zh-Hans" : {
@@ -271,12 +321,52 @@
         }
       }
     },
+    "Exercise" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动"
+          }
+        }
+      }
+    },
+    "Exercise activities do not trigger away reminders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动类活动不会触发离开提醒。"
+          }
+        }
+      }
+    },
+    "Exercise activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动类活动"
+          }
+        }
+      }
+    },
     "Exercise and the timetable are not reminded." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "运动类和课表不提醒。"
+          }
+        }
+      }
+    },
+    "Exercise status follows the parent activity." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运动属性跟随父活动。"
           }
         }
       }
@@ -379,6 +469,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建活动"
+          }
+        }
+      }
+    },
+    "New Sub-activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建子活动"
           }
         }
       }
@@ -534,6 +634,16 @@
         }
       }
     },
+    "Parent activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "父活动"
+          }
+        }
+      }
+    },
     "Password" : {
       "localizations" : {
         "zh-Hans" : {
@@ -604,12 +714,42 @@
         }
       }
     },
+    "Restore" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复"
+          }
+        }
+      }
+    },
     "Resume" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "继续"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "Schedule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "课表"
           }
         }
       }
@@ -780,6 +920,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "青"
+          }
+        }
+      }
+    },
+    "The activity and its sub-activities will be hidden from activity selection. Existing records will be kept. Unsaved edits will be discarded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此活动及其子活动将从活动选择列表中隐藏。已有记录会保留。未保存的修改将被丢弃。"
           }
         }
       }
