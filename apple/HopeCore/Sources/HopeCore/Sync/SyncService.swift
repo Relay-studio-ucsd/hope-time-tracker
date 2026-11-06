@@ -19,7 +19,7 @@ public enum SignInOutcome: Sendable, Equatable {
     /// This device last synced a different account. Nothing was stored; call again with `confirmSwitch`
     /// after asking the user. Local data is then merged into the new account.
     case confirmSwitch(previousEmail: String?)
-    /// Sign-up needs the emailed link clicked before signing in.
+    /// A 6-digit code was emailed; finish with `verifySignUp`.
     case checkEmail
 }
 
@@ -58,7 +58,16 @@ public final class SyncService {
         var expiresAtMs: Int64
     }
 
+    /// A password-reset code that was already verified (and so is spent) while the new password has not been
+    /// accepted yet; lets the user retry with another password (rebuild-plan 17.3).
+    private struct PendingReset {
+        var email: String
+        var code: String
+        var tokens: AuthTokens
+    }
+
     private var auth: AuthSession?
+    @ObservationIgnored private var pendingReset: PendingReset?
     private var syncedOnce = false
     public private(set) var lastOkMs: Int64?
     public private(set) var lastError: SyncError?
@@ -76,6 +85,9 @@ public final class SyncService {
     static let tokenMarginMs: Int64 = 60_000
     /// `sync.last_ok_ms` is written at most this often (the in-memory value is always current).
     static let lastOkSaveMs: Int64 = 30_000
+    /// Shortest password accepted when creating an account or resetting one (rebuild-plan 17.3); the project's
+    /// own setting is the authority, this only saves a round trip.
+    public static let minPasswordChars = 8
 
     enum Message: Sendable { case localWrite, syncNow, tick }
 
@@ -230,6 +242,8 @@ public final class SyncService {
             sessionExpired(e)
             throw SyncError(.signedOut, "session expired")
         } catch {
+            // Signed out (or the account was deleted) while the round was in flight: nothing to report.
+            guard isSignedIn else { throw SyncError(.signedOut, "signed out during the round") }
             let e = error as? SyncError ?? SyncError(.database, String(describing: error))
             lastError = e
             try? store.saveSettings([LocalStore.Setting.lastError: e.description])
@@ -297,10 +311,87 @@ public final class SyncService {
     }
 
     public func signUp(email: String, password: String, confirmSwitch: Bool = false) async throws -> SignInOutcome {
-        switch try await api().signUp(email: email.trimmingCharacters(in: .whitespaces), password: password) {
+        let api = try api()
+        try Self.checkPassword(password)
+        switch try await api.signUp(email: Self.trim(email), password: password) {
         case .signedIn(let tokens): return try establish(tokens, confirmSwitch: confirmSwitch)
         case .confirmEmail: return .checkEmail
         }
+    }
+
+    static func trim(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    static func checkPassword(_ password: String) throws {
+        if password.count < minPasswordChars {
+            throw SyncError(.weakPassword, "shorter than \(minPasswordChars) characters")
+        }
+    }
+
+    /// Finishes a sign-up with the emailed code. The code is spent by a correct answer, so after `.confirmSwitch`
+    /// the caller continues with a plain `signIn` (the account can sign in by then).
+    public func verifySignUp(email: String, code: String, confirmSwitch: Bool = false) async throws -> SignInOutcome {
+        let tokens = try await api().verify(.signUp, email: Self.trim(email), code: Self.trim(code))
+        return try establish(tokens, confirmSwitch: confirmSwitch)
+    }
+
+    public func resendSignUpCode(email: String) async throws {
+        try await api().resendSignUpCode(email: Self.trim(email))
+    }
+
+    /// Emails a password-reset code. Succeeds whether or not the address has an account.
+    public func requestPasswordReset(email: String) async throws {
+        try await api().recover(email: Self.trim(email))
+    }
+
+    /// Verifies the reset code, sets the new password and signs in. After `.confirmSwitch` the caller continues
+    /// with a plain `signIn` using the new password.
+    public func resetPassword(email: String, code: String, newPassword: String, confirmSwitch: Bool = false) async throws -> SignInOutcome {
+        let api = try api()
+        let (email, code) = (Self.trim(email), Self.trim(code))
+        try Self.checkPassword(newPassword)
+        // A code verifies only once: reuse the session from an earlier attempt with the same code.
+        let tokens: AuthTokens
+        if let p = pendingReset, p.email == email, p.code == code {
+            tokens = p.tokens
+        } else {
+            tokens = try await api.verify(.recovery, email: email, code: code)
+        }
+        pendingReset = nil
+        do {
+            try await api.updatePassword(accessToken: tokens.accessToken, password: newPassword)
+        } catch {
+            pendingReset = PendingReset(email: email, code: code, tokens: tokens)
+            throw error
+        }
+        return try establish(tokens, confirmSwitch: confirmSwitch)
+    }
+
+    /// Deletes the signed-in account and everything it stored in the cloud (rebuild-plan 17.4). Records on this
+    /// device stay, and the device forgets the account entirely: the next sign-in, to any account, uploads them
+    /// again without asking about a switch.
+    public func deleteAccount() async throws {
+        let api = try api()
+        var force = false
+        while true {
+            let token = try await accessToken(force: force)
+            do {
+                try await api.deleteAccount(accessToken: token)
+                break
+            } catch let e as SyncError where e.code == .sessionExpired && !force {
+                force = true
+            }
+        }
+        auth = nil
+        tokenStore.delete()
+        let forgotten: [String: String?] = [
+            LocalStore.Setting.userId: nil, LocalStore.Setting.email: nil,
+            LocalStore.Setting.lastOk: nil, LocalStore.Setting.lastError: nil,
+        ]
+        try store.saveSettings(forgotten)
+        lastError = nil
+        syncedOnce = false
+        lastOkMs = nil
+        lastOkSavedMs = 0
     }
 
     func establish(_ tokens: AuthTokens, confirmSwitch: Bool) throws -> SignInOutcome {

@@ -79,8 +79,14 @@ public struct AuthTokens: Codable, Sendable, Equatable {
 
 public enum SignUpResult: Sendable, Equatable {
     case signedIn(AuthTokens)
-    /// The project requires email confirmation; no session until the link is clicked.
+    /// The project requires email confirmation; no session until the emailed code is verified.
     case confirmEmail
+}
+
+/// Which emailed code `verify` checks (rebuild-plan 17.3).
+public enum CodeKind: String, Sendable {
+    case signUp = "signup"
+    case recovery
 }
 
 /// Email + password auth against `/auth/v1`, request for request the same as `src-tauri/src/sync/http.rs`.
@@ -93,9 +99,9 @@ public struct AuthAPI: Sendable {
         self.transport = transport
     }
 
-    func request(_ path: String, body: [String: String]? = nil, bearer: String? = nil) -> URLRequest {
+    func request(_ path: String, method: String = "POST", body: [String: String]? = nil, bearer: String? = nil) -> URLRequest {
         var r = URLRequest(url: URL(string: "\(config.url)/auth/v1/\(path)")!)
-        r.httpMethod = "POST"
+        r.httpMethod = method
         r.setValue(config.anonKey, forHTTPHeaderField: "apikey")
         if let bearer { r.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
         if let body {
@@ -115,11 +121,65 @@ public struct AuthAPI: Sendable {
     public func signUp(email: String, password: String) async throws -> SignUpResult {
         let (status, body) = try await transport.send(request("signup", body: ["email": email, "password": password]))
         guard (200..<300).contains(status) else { throw Self.authError(status: status, body: body, refreshing: false) }
-        // With "Confirm email" on, the answer is the new user without a session.
-        if String(decoding: body, as: UTF8.self).contains("\"access_token\"") {
-            return .signedIn(try Self.parseTokens(body))
+        return try Self.parseSignUp(body)
+    }
+
+    static func parseSignUp(_ body: Data) throws -> SignUpResult {
+        guard let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
+            throw SyncError.decode("sign-up response")
+        }
+        if parsed["access_token"] != nil { return .signedIn(try parseTokens(body)) }
+        // With "Confirm email" on, the answer is the new user without a session. For an address that is already
+        // registered GoTrue answers 200 with a made-up user (so addresses cannot be probed) and sends nothing;
+        // the one tell is an empty `identities` list.
+        if let identities = parsed["identities"] as? [Any], identities.isEmpty {
+            throw SyncError(.userAlreadyExists, "sign-up answered with no identities")
         }
         return .confirmEmail
+    }
+
+    /// Checks an emailed 6-digit code. A correct one is spent and answers with a session.
+    public func verify(_ kind: CodeKind, email: String, code: String) async throws -> AuthTokens {
+        let (status, body) = try await transport.send(
+            request("verify", body: ["type": kind.rawValue, "email": email, "token": code]))
+        guard (200..<300).contains(status) else { throw Self.authError(status: status, body: body, refreshing: false) }
+        return try Self.parseTokens(body)
+    }
+
+    /// Sends the sign-up code again.
+    public func resendSignUpCode(email: String) async throws {
+        try await expectSuccess(request("resend", body: ["type": CodeKind.signUp.rawValue, "email": email]))
+    }
+
+    /// Emails a password-reset code. Succeeds whether or not the address has an account.
+    public func recover(email: String) async throws {
+        try await expectSuccess(request("recover", body: ["email": email]))
+    }
+
+    /// Sets a new password for the session behind `accessToken`.
+    public func updatePassword(accessToken: String, password: String) async throws {
+        try await expectSuccess(request("user", method: "PUT", body: ["password": password], bearer: accessToken))
+    }
+
+    private func expectSuccess(_ r: URLRequest) async throws {
+        let (status, body) = try await transport.send(r)
+        guard (200..<300).contains(status) else { throw Self.authError(status: status, body: body, refreshing: false) }
+    }
+
+    /// Deletes the account behind `accessToken` and all of its rows (`delete_account()` in `supabase/schema.sql`).
+    /// A 401 comes back as `sessionExpired` so the caller can refresh and retry.
+    public func deleteAccount(accessToken: String) async throws {
+        var r = URLRequest(url: URL(string: "\(config.url)/rest/v1/rpc/delete_account")!)
+        r.httpMethod = "POST"
+        r.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+        r.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = Data("{}".utf8)
+        let (status, body) = try await transport.send(r)
+        if status == 401 { throw SyncError(.sessionExpired, "access token rejected") }
+        guard (200..<300).contains(status) else {
+            throw SyncError(.server, "HTTP \(status): \(String(String(decoding: body, as: UTF8.self).prefix(300)))")
+        }
     }
 
     public func refresh(_ refreshToken: String) async throws -> AuthTokens {
@@ -160,6 +220,7 @@ public struct AuthAPI: Sendable {
             case "email_not_confirmed": kind = .emailNotConfirmed
             case "user_already_exists", "email_exists": kind = .userAlreadyExists
             case "weak_password": kind = .weakPassword
+            case "otp_expired": kind = .invalidCode
             default: kind = .server
             }
         }

@@ -67,9 +67,10 @@ func message(for error: SyncError) -> String {
     case .signedOut: String(localized: "Not signed in.")
     case .network: String(localized: "Can't reach the sync server. Hope will keep trying.")
     case .invalidCredentials: String(localized: "Wrong email or password.")
-    case .emailNotConfirmed: String(localized: "Confirm your email first: check your inbox for the link.")
+    case .emailNotConfirmed: String(localized: "Finish creating the account with the code we emailed you.")
     case .userAlreadyExists: String(localized: "An account with this email already exists. Sign in instead.")
-    case .weakPassword: String(localized: "Choose a longer password.")
+    case .weakPassword: String(localized: "Use at least 8 characters.")
+    case .invalidCode: String(localized: "That code is wrong or has expired. Request a new one.")
     case .rateLimited: String(localized: "Too many attempts. Try again in a few minutes.")
     case .sessionExpired: String(localized: "Your sign-in has expired. Sign in again.")
     case .server, .keychain, .database, .decode:

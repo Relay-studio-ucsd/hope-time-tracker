@@ -69,6 +69,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::sync::sync_status,
             commands::sync::sync_sign_in,
             commands::sync::sync_sign_up,
+            commands::sync::sync_verify_sign_up,
+            commands::sync::sync_resend_sign_up_code,
+            commands::sync::sync_request_password_reset,
+            commands::sync::sync_reset_password,
+            commands::sync::sync_delete_account,
             commands::sync::sync_sign_out,
             commands::sync::sync_now,
         ])

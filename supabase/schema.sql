@@ -198,6 +198,50 @@ begin
       'using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()))', t);
     execute format(
       'create policy hope_delete on public.%I for delete to authenticated using (user_id = (select auth.uid()))', t);
+
+    -- Rows die with their account (rebuild-plan 17.4). Without this, a device still holding an access
+    -- token of a deleted account (valid for up to an hour) could keep writing rows nobody owns.
+    -- NOT VALID: existing rows are not checked, so this never fails on an old database; every new
+    -- write is checked, and deleting the user cascades to all of their rows either way.
+    if not exists (
+      select 1 from pg_constraint
+      where conname = t || '_user_fk' and conrelid = format('public.%I', t)::regclass
+    ) then
+      execute format(
+        'alter table public.%I add constraint %I foreign key (user_id) references auth.users (id) '
+        'on delete cascade not valid', t, t || '_user_fk');
+    end if;
   end loop;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Delete the signed-in account (rebuild-plan 17.4)
+--
+-- Called by the apps as POST /rest/v1/rpc/delete_account. Runs as the owner because a user cannot
+-- delete their own auth.users row; it only ever acts on auth.uid(), so that is safe to expose.
+-- Removing the auth.users row also removes the user's sessions and refresh tokens.
+
+create or replace function public.delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'not signed in' using errcode = '28000';
+  end if;
+  delete from public.session  where user_id = uid;
+  delete from public.plan     where user_id = uid;
+  delete from public.journal  where user_id = uid;
+  delete from public.day      where user_id = uid;
+  delete from public.activity where user_id = uid;
+  delete from auth.users where id = uid;
+end;
+$$;
+
+revoke all on function public.delete_account() from public, anon;
+grant execute on function public.delete_account() to authenticated;

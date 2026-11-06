@@ -39,6 +39,7 @@ struct SupabaseHTTPTests {
         #expect(code(400, #"{"error_code":"email_not_confirmed","msg":"Email not confirmed"}"#) == .emailNotConfirmed)
         #expect(code(422, #"{"error_code":"user_already_exists"}"#) == .userAlreadyExists)
         #expect(code(422, #"{"error_code":"weak_password"}"#) == .weakPassword)
+        #expect(code(403, #"{"code":403,"error_code":"otp_expired","msg":"Token has expired or is invalid"}"#) == .invalidCode)
         #expect(code(429, "") == .rateLimited)
         #expect(code(400, #"{"error_code":"refresh_token_not_found"}"#, refreshing: true) == .sessionExpired)
         #expect(code(502, "<html>") == .server)
@@ -47,6 +48,71 @@ struct SupabaseHTTPTests {
     @Test func tokenResponseParses() throws {
         let t = try AuthAPI.parseTokens(Data(tokensJSON(access: "a", refresh: "r", user: "u").utf8))
         #expect(t.accessToken == "a" && t.refreshToken == "r" && t.user.id == "u" && t.expiresIn == 3600)
+    }
+
+    @Test func signUpAnswersAreToldApart() throws {
+        func parse(_ body: String) throws -> SignUpResult { try AuthAPI.parseSignUp(Data(body.utf8)) }
+        #expect(try parse(tokensJSON(access: "a", refresh: "r")) == .signedIn(try AuthAPI.parseTokens(Data(tokensJSON(access: "a", refresh: "r").utf8))))
+        #expect(try parse(#"{"id":"u","email":"e@x.io","identities":[{"id":"u","provider":"email"}]}"#) == .confirmEmail)
+        #expect(throws: SyncError(.userAlreadyExists, "sign-up answered with no identities")) {
+            try parse(#"{"id":"u","email":"e@x.io","identities":[]}"#)
+        }
+        #expect(throws: SyncError(.decode, "sign-up response")) { try parse("<html>") }
+    }
+
+    /// Rebuild-plan 17.3, request for request the same as `src-tauri/src/sync/http.rs`.
+    @Test func accountRequestsMatchTheDesktop() async throws {
+        let http = FakeHTTP { r in
+            switch r.url!.path {
+            case "/auth/v1/verify": (200, tokensJSON(access: "a", refresh: "r"))
+            case "/rest/v1/rpc/delete_account": (204, "")
+            default: (200, #"{"id":"u"}"#)
+            }
+        }
+        let api = AuthAPI(config: config, transport: http)
+        _ = try await api.verify(.signUp, email: "e@x.io", code: "123456")
+        _ = try await api.verify(.recovery, email: "e@x.io", code: "654321")
+        try await api.resendSignUpCode(email: "e@x.io")
+        try await api.recover(email: "e@x.io")
+        try await api.updatePassword(accessToken: "a", password: "longer-password")
+        try await api.deleteAccount(accessToken: "a")
+
+        let r = http.requests
+        #expect(r.map { "\($0.httpMethod!) \($0.url!.absoluteString)" } == [
+            "POST https://demo.supabase.co/auth/v1/verify",
+            "POST https://demo.supabase.co/auth/v1/verify",
+            "POST https://demo.supabase.co/auth/v1/resend",
+            "POST https://demo.supabase.co/auth/v1/recover",
+            "PUT https://demo.supabase.co/auth/v1/user",
+            "POST https://demo.supabase.co/rest/v1/rpc/delete_account",
+        ])
+        #expect(r.allSatisfy { $0.value(forHTTPHeaderField: "apikey") == "anon" })
+        #expect(bodyJSON(r[0]) as? [String: String] == ["type": "signup", "email": "e@x.io", "token": "123456"])
+        #expect(bodyJSON(r[1]) as? [String: String] == ["type": "recovery", "email": "e@x.io", "token": "654321"])
+        #expect(bodyJSON(r[2]) as? [String: String] == ["type": "signup", "email": "e@x.io"])
+        #expect(bodyJSON(r[3]) as? [String: String] == ["email": "e@x.io"])
+        #expect(bodyJSON(r[4]) as? [String: String] == ["password": "longer-password"])
+        #expect(r[4].value(forHTTPHeaderField: "Authorization") == "Bearer a")
+        #expect(r[5].value(forHTTPHeaderField: "Authorization") == "Bearer a")
+    }
+
+    @Test func rejectedAccountRequestsMapToCodes() async throws {
+        let http = FakeHTTP { r in
+            switch r.url!.path {
+            case "/auth/v1/verify": (403, #"{"code":403,"error_code":"otp_expired","msg":"Token has expired or is invalid"}"#)
+            case "/auth/v1/user": (422, #"{"code":422,"error_code":"weak_password","msg":"Password should be at least 8 characters."}"#)
+            case "/rest/v1/rpc/delete_account": (401, #"{"code":"PGRST301","message":"JWT expired"}"#)
+            default: (429, #"{"code":429,"error_code":"over_email_send_rate_limit","msg":"For security purposes, you can only request this after 60 seconds."}"#)
+            }
+        }
+        let api = AuthAPI(config: config, transport: http)
+        func code(_ body: () async throws -> Void) async -> SyncErrorCode? {
+            do { try await body(); return nil } catch { return (error as? SyncError)?.code }
+        }
+        #expect(await code { _ = try await api.verify(.recovery, email: "e@x.io", code: "000000") } == .invalidCode)
+        #expect(await code { try await api.updatePassword(accessToken: "a", password: "short") } == .weakPassword)
+        #expect(await code { try await api.deleteAccount(accessToken: "a") } == .sessionExpired)
+        #expect(await code { try await api.recover(email: "e@x.io") } == .rateLimited)
     }
 
     @Test func configIgnoresUnexpandedOrEmptyValues() {
@@ -233,6 +299,93 @@ struct SyncServiceTests {
         #expect(watch.isSignedIn)
         await watch.adopt(SessionHandoff(tokens: nil))
         #expect(!watch.isSignedIn, "the phone signed out")
+    }
+
+    /// GoTrue with "Confirm email" on: sign-up answers a user without a session, `verify` hands out the session.
+    final class CodeAuth: @unchecked Sendable {
+        let lock = NSLock()
+        var verifies = 0
+        var passwordUpdates = 0
+        /// Answers for successive PUT /user calls (then 200).
+        var rejectPasswordTimes = 0
+        func handle(_ r: URLRequest) -> (Int, String) {
+            lock.withLock {
+                switch r.url!.path {
+                case "/auth/v1/signup": return (200, #"{"id":"u1","email":"e@x.io","identities":[{"id":"u1"}]}"#)
+                case "/auth/v1/verify":
+                    verifies += 1
+                    return (200, tokensJSON(access: "a\(verifies)", refresh: "r\(verifies)"))
+                case "/auth/v1/user":
+                    passwordUpdates += 1
+                    if rejectPasswordTimes > 0 {
+                        rejectPasswordTimes -= 1
+                        return (422, #"{"code":422,"error_code":"weak_password","msg":"Password should contain a digit."}"#)
+                    }
+                    return (200, #"{"id":"u1"}"#)
+                case "/auth/v1/resend", "/auth/v1/recover": return (200, "{}")
+                default: return (200, r.httpMethod == "GET" ? "[]" : String(decoding: r.httpBody!, as: UTF8.self))
+                }
+            }
+        }
+    }
+
+    @Test func signUpFinishesWithTheEmailedCode() async throws {
+        let auth = CodeAuth()
+        let db = try device("d")
+        let tokens = MemoryTokenStore()
+        let sync = SyncService(store: db, config: config, transport: FakeHTTP(auth.handle), tokenStore: tokens)
+        await #expect(throws: SyncError(.weakPassword, "shorter than 8 characters")) {
+            _ = try await sync.signUp(email: "e@x.io", password: "short")
+        }
+        #expect(try await sync.signUp(email: "e@x.io", password: "long enough") == .checkEmail)
+        #expect(!sync.isSignedIn)
+        try await sync.resendSignUpCode(email: "e@x.io")
+        #expect(try await sync.verifySignUp(email: " e@x.io ", code: "123456 ") == .signedIn)
+        #expect(sync.isSignedIn && tokens.load() == "r1" && sync.email == "e@x.io")
+    }
+
+    @Test func passwordResetRetriesWithoutANewCode() async throws {
+        let auth = CodeAuth()
+        auth.rejectPasswordTimes = 1
+        let db = try device("d")
+        let sync = SyncService(store: db, config: config, transport: FakeHTTP(auth.handle), tokenStore: MemoryTokenStore())
+        try await sync.requestPasswordReset(email: "e@x.io")
+        await #expect(throws: SyncError(.weakPassword, "shorter than 8 characters")) {
+            _ = try await sync.resetPassword(email: "e@x.io", code: "123456", newPassword: "short")
+        }
+        #expect(auth.verifies == 0, "nothing is sent for a password that is too short")
+        await #expect(throws: SyncError.self) {
+            _ = try await sync.resetPassword(email: "e@x.io", code: "123456", newPassword: "eightchars")
+        }
+        #expect(auth.verifies == 1 && auth.passwordUpdates == 1)
+        #expect(try await sync.resetPassword(email: "e@x.io", code: "123456", newPassword: "eightchars1") == .signedIn)
+        #expect(auth.verifies == 1, "the spent code is not sent again")
+        #expect(auth.passwordUpdates == 2)
+        #expect(sync.isSignedIn)
+    }
+
+    @Test func deletingTheAccountForgetsItHere() async throws {
+        let auth = Auth()
+        let db = try device("d")
+        _ = try db.addActivity(1, "Work")
+        let tokens = MemoryTokenStore()
+        let http = FakeHTTP(auth.handle)
+        let sync = SyncService(store: db, config: config, transport: http, tokenStore: tokens)
+        _ = try await sync.signIn(email: "e@x.io", password: "pw")
+        try await sync.round(full: true)
+        #expect(try db.dirtyCount() == 0)
+
+        try await sync.deleteAccount()
+        let call = try #require(http.requests.last)
+        #expect(call.url!.absoluteString == "https://demo.supabase.co/rest/v1/rpc/delete_account")
+        #expect(call.value(forHTTPHeaderField: "Authorization") == "Bearer a1")
+        #expect(sync.phase == .signedOut && tokens.load() == nil)
+        #expect(sync.email == nil, "the account is forgotten, not remembered for a switch")
+        #expect(db.activities().count == 1, "local records stay")
+
+        auth.user = "u2"
+        #expect(try await sync.signIn(email: "f@x.io", password: "pw") == .signedIn, "no switch question")
+        #expect(try db.dirtyCount() == 1, "every local row is offered to the new account")
     }
 
     @Test func notConfiguredStaysLocal() async throws {

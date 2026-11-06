@@ -1,7 +1,8 @@
 import HopeCore
 import SwiftUI
 
-/// Sign in / create account / sign out — the only setting in stage 8 (rebuild-plan 12.4).
+/// Sign in / create account / password reset / delete account (rebuild-plan 12.4, 17), plus the two
+/// reminder switches, because this is the only settings page so far.
 struct AccountView: View {
     @Environment(AppModel.self) private var model
     @Environment(PhoneLink.self) private var watch
@@ -9,8 +10,14 @@ struct AccountView: View {
     @Environment(BreakScheduler.self) private var breaks
     @Environment(\.dismiss) private var dismiss
 
+    /// What the signed-out form is asking for (rebuild-plan 17.5): email + password → the sign-up code →
+    /// (forgot) the address to send a reset code to → the reset code + new password.
+    enum Mode { case credentials, verify, forgot, reset }
+
+    @State private var mode: Mode = .credentials
     @State private var email = ""
     @State private var password = ""
+    @State private var code = ""
     @State private var busy = false
     @State private var error: String?
     @State private var note: String?
@@ -18,13 +25,13 @@ struct AccountView: View {
     @State private var pendingSwitch: PendingSwitch?
     @State private var askWatchPassword = false
     @State private var watchPassword = ""
+    @State private var confirmDelete = false
 
     struct PendingSwitch: Identifiable {
         var id: String { email }
         var email: String
         var password: String
         var previous: String?
-        var signUp: Bool
     }
 
     var body: some View {
@@ -62,7 +69,15 @@ struct AccountView: View {
                 "Use a Different Account?", isPresented: Binding(get: { pendingSwitch != nil }, set: { if !$0 { pendingSwitch = nil } }),
                 presenting: pendingSwitch
             ) { p in
-                Button("Merge") { Task { await submit(email: p.email, password: p.password, signUp: p.signUp, confirmSwitch: true) } }
+                // Codes are spent once verified, so the switch always ends in a plain sign-in: the account
+                // (which can sign in by then) with its password.
+                Button("Merge") {
+                    Task {
+                        if let outcome = await perform({ try await model.sync.signIn(email: p.email, password: p.password, confirmSwitch: true) }) {
+                            await settle(outcome, password: p.password)
+                        }
+                    }
+                }
                 Button("Cancel", role: .cancel) {}
             } message: { p in
                 Text("This device last synced with \(p.previous ?? String(localized: "another account")). Its records will be merged into \(p.email). Nothing is deleted.")
@@ -73,6 +88,12 @@ struct AccountView: View {
                 Button("Cancel", role: .cancel) { watchPassword = "" }
             } message: {
                 Text("Enter your password once more so the watch gets its own sign-in.")
+            }
+            .confirmationDialog("Delete this account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) { Task { await deleteAccount() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("\(sync.email ?? "") and everything it stored in the cloud will be permanently deleted, and other devices will stop syncing. Records on this iPhone stay.")
             }
         }
     }
@@ -104,23 +125,88 @@ struct AccountView: View {
         }
     }
 
+    // MARK: Signed out
+
+    private var emailField: some View {
+        TextField("Email", text: $email)
+            .textContentType(.username)
+            .keyboardType(.emailAddress)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+    }
+
+    /// Six digits; the keyboard offers the code from the email.
+    private var codeField: some View {
+        TextField("Code", text: $code)
+            .textContentType(.oneTimeCode)
+            .keyboardType(.numberPad)
+            .onChange(of: code) { _, value in
+                let digits = String(value.filter(\.isNumber).prefix(6))
+                if digits != value { code = digits }
+            }
+    }
+
+    private var hasCode: Bool { code.count == 6 }
+
+    @ViewBuilder
     private var signedOutSection: some View {
-        Section {
-            TextField("Email", text: $email)
-                .textContentType(.username)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            SecureField("Password", text: $password)
-                .textContentType(.password)
-            Button("Sign In") { Task { await submit(email: email, password: password, signUp: false) } }
-                .disabled(email.isEmpty || password.isEmpty)
-            Button("Create Account") { Task { await submit(email: email, password: password, signUp: true) } }
-                .disabled(email.isEmpty || password.isEmpty)
-        } footer: {
-            Text("Records on this device are merged into the account.")
+        switch mode {
+        case .credentials:
+            Section {
+                emailField
+                SecureField("Password", text: $password)
+                    .textContentType(.password)
+                Button("Sign In") { Task { await signIn() } }
+                    .disabled(email.isEmpty || password.isEmpty)
+                Button("Create Account") { Task { await signUp() } }
+                    .disabled(email.isEmpty || password.isEmpty)
+                Button("Forgot Password?") { switchMode(.forgot) }
+            } footer: {
+                Text("Records on this device are merged into the account.")
+            }
+        case .verify:
+            Section {
+                codeField
+                Button("Confirm") { Task { await verify() } }
+                    .disabled(!hasCode)
+                Button("Resend Code") { Task { await resend() } }
+                Button("Back") { switchMode(.credentials) }
+            } footer: {
+                Text("Enter the code from the email to finish creating the account.")
+            }
+        case .forgot:
+            Section {
+                emailField
+                Button("Send Code") { Task { await sendResetCode() } }
+                    .disabled(email.isEmpty)
+                Button("Back") { switchMode(.credentials) }
+            } footer: {
+                Text("We'll email a code to reset your password.")
+            }
+        case .reset:
+            Section {
+                codeField
+                SecureField("New Password", text: $password)
+                    .textContentType(.newPassword)
+                Button("Reset Password") { Task { await resetPassword() } }
+                    .disabled(!hasCode || password.isEmpty)
+                Button("Resend Code") { Task { await resend() } }
+                Button("Back") { switchMode(.credentials) }
+            } footer: {
+                Text("At least 8 characters.")
+            }
         }
     }
+
+    private func switchMode(_ next: Mode) {
+        mode = next
+        code = ""
+        if next == .credentials || next == .reset { password = "" }
+        error = nil
+        note = nil
+    }
+
+    // MARK: Signed in
 
     @ViewBuilder
     private func signedInSection(_ sync: SyncService) -> some View {
@@ -145,6 +231,11 @@ struct AccountView: View {
         } footer: {
             Text("Signing out keeps everything on this device.")
         }
+        Section {
+            Button("Delete Account…", role: .destructive) { confirmDelete = true }
+        } footer: {
+            Text("Deleting removes the account and its cloud data. Records on this iPhone stay.")
+        }
     }
 
     private func statusText(_ sync: SyncService) -> Text {
@@ -160,29 +251,104 @@ struct AccountView: View {
         }
     }
 
-    private func submit(email: String, password: String, signUp: Bool, confirmSwitch: Bool = false) async {
+    // MARK: Flows (rebuild-plan 17.3)
+
+    /// Runs one account call, showing its error; `nil` when it failed.
+    private func perform<T>(_ call: () async throws -> T) async -> T? {
         busy = true
         error = nil
         note = nil
         defer { busy = false }
         do {
-            let outcome = signUp
-                ? try await model.sync.signUp(email: email, password: password, confirmSwitch: confirmSwitch)
-                : try await model.sync.signIn(email: email, password: password, confirmSwitch: confirmSwitch)
-            switch outcome {
-            case .signedIn:
-                if watch.watchAvailable { await handOff(email: email, password: password) }
-                self.password = ""
-            case .confirmSwitch(let previous):
-                pendingSwitch = PendingSwitch(email: email, password: password, previous: previous, signUp: signUp)
-            case .checkEmail:
-                note = String(localized: "Check \(email) for a confirmation link, then sign in here.")
-            }
+            return try await call()
         } catch let e as SyncError {
             error = message(for: e)
         } catch {
             self.error = String(describing: error)
         }
+        return nil
+    }
+
+    /// Ends a sign-in. `password` is what the account signs in with from now on (needed for the watch
+    /// hand-off and for the "different account" merge).
+    private func settle(_ outcome: SignInOutcome, password: String) async {
+        switch outcome {
+        case .signedIn:
+            if watch.watchAvailable { await handOff(email: email, password: password) }
+            self.password = ""
+            code = ""
+            mode = .credentials
+        case .confirmSwitch(let previous):
+            pendingSwitch = PendingSwitch(email: email, password: password, previous: previous)
+        case .checkEmail:
+            mode = .verify
+            code = ""
+            note = String(localized: "We emailed a 6-digit code to \(email).")
+        }
+    }
+
+    private func signIn() async {
+        busy = true
+        error = nil
+        note = nil
+        defer { busy = false }
+        do {
+            let outcome = try await model.sync.signIn(email: email, password: password)
+            await settle(outcome, password: password)
+        } catch let e as SyncError {
+            error = message(for: e)
+            // Sign-up was never finished: the code can still be entered (or sent again).
+            if e.code == .emailNotConfirmed {
+                mode = .verify
+                code = ""
+            }
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
+    private func signUp() async {
+        if let outcome = await perform({ try await model.sync.signUp(email: email, password: password) }) {
+            await settle(outcome, password: password)
+        }
+    }
+
+    private func verify() async {
+        if let outcome = await perform({ try await model.sync.verifySignUp(email: email, code: code) }) {
+            await settle(outcome, password: password)
+        }
+    }
+
+    private func sendResetCode() async {
+        guard await perform({ try await model.sync.requestPasswordReset(email: email) }) != nil else { return }
+        mode = .reset
+        code = ""
+        password = ""
+        note = String(localized: "If \(email) has an account, a 6-digit code is on its way.")
+    }
+
+    private func resend() async {
+        let sent = await perform {
+            if mode == .reset {
+                try await model.sync.requestPasswordReset(email: email)
+            } else {
+                try await model.sync.resendSignUpCode(email: email)
+            }
+        }
+        if sent != nil { note = String(localized: "A new code is on its way to \(email).") }
+    }
+
+    private func resetPassword() async {
+        if let outcome = await perform({ try await model.sync.resetPassword(email: email, code: code, newPassword: password) }) {
+            await settle(outcome, password: password)
+        }
+    }
+
+    private func deleteAccount() async {
+        guard await perform({ try await model.sync.deleteAccount() }) != nil else { return }
+        watch.send(SessionHandoff(tokens: nil))
+        email = ""
+        note = String(localized: "Account deleted. Your records stay on this iPhone.")
     }
 
     /// The watch gets its own session: a second sign-in with the same password (see `SessionHandoff`).

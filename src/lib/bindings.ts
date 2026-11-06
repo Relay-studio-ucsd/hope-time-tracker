@@ -127,8 +127,30 @@ export const commands = {
 	 *  `confirm_switch`; ask the user, then call again with `confirm_switch: true`.
 	 */
 	syncSignIn: (email: string, password: string, confirmSwitch: boolean) => typedError<SignInOutcome, SyncError>(__TAURI_INVOKE("sync_sign_in", { email, password, confirmSwitch })),
-	/**  Creates an account. Answers `check_email` when the project requires email confirmation. */
+	/**
+	 *  Creates an account. Answers `check_email` when a 6-digit code was emailed; finish with
+	 *  `sync_verify_sign_up`.
+	 */
 	syncSignUp: (email: string, password: string, confirmSwitch: boolean) => typedError<SignInOutcome, SyncError>(__TAURI_INVOKE("sync_sign_up", { email, password, confirmSwitch })),
+	/**
+	 *  Finishes creating an account with the emailed code. On `confirm_switch`, ask the user and then
+	 *  call `sync_sign_in` with `confirm_switch: true` (the code is spent, the account can sign in).
+	 */
+	syncVerifySignUp: (email: string, code: string, confirmSwitch: boolean) => typedError<SignInOutcome, SyncError>(__TAURI_INVOKE("sync_verify_sign_up", { email, code, confirmSwitch })),
+	/**  Emails the sign-up code again. */
+	syncResendSignUpCode: (email: string) => typedError<null, SyncError>(__TAURI_INVOKE("sync_resend_sign_up_code", { email })),
+	/**  Emails a password-reset code. Succeeds whether or not the address has an account. */
+	syncRequestPasswordReset: (email: string) => typedError<null, SyncError>(__TAURI_INVOKE("sync_request_password_reset", { email })),
+	/**
+	 *  Sets a new password with the emailed code and signs in. On `confirm_switch`, ask the user and
+	 *  then call `sync_sign_in` with the new password and `confirm_switch: true`.
+	 */
+	syncResetPassword: (email: string, code: string, newPassword: string, confirmSwitch: boolean) => typedError<SignInOutcome, SyncError>(__TAURI_INVOKE("sync_reset_password", { email, code, newPassword, confirmSwitch })),
+	/**
+	 *  Deletes the signed-in account and all of its cloud data. Local data is kept. The page must
+	 *  confirm with the user first.
+	 */
+	syncDeleteAccount: () => typedError<null, SyncError>(__TAURI_INVOKE("sync_delete_account")),
 	/**  Signs out on this device. Local data is kept. */
 	syncSignOut: () => typedError<null, SyncError>(__TAURI_INVOKE("sync_sign_out")),
 	/**  Push and pull now instead of waiting for the next round. */
@@ -398,7 +420,7 @@ export type SignInOutcome = { kind: "signed_in" } |
  *  `confirm_switch` after asking the user. Local data is then merged into the new account.
  */
 { kind: "confirm_switch"; previous_email: string | null } | 
-/**  Sign-up needs the emailed link clicked before signing in. */
+/**  A 6-digit code was emailed; finish with `verify_sign_up`. */
 { kind: "check_email" };
 
 /**  Error from the sync layer; also what the sync commands return to the page. */
@@ -411,7 +433,9 @@ export type SyncError = {
 /**  Stable reason the Settings page turns into a localized message (`sync.error.<code>`). */
 export type SyncErrorCode = "not_configured" | "signed_out" | 
 /**  No connection, DNS failure, timeout, TLS failure. */
-"network" | "invalid_credentials" | "email_not_confirmed" | "user_already_exists" | "weak_password" | "rate_limited" | 
+"network" | "invalid_credentials" | "email_not_confirmed" | "user_already_exists" | "weak_password" | 
+/**  The emailed 6-digit code is wrong or has expired. */
+"invalid_code" | "rate_limited" | 
 /**  The refresh token was rejected; the user has to sign in again. */
 "session_expired" | 
 /**  The server answered with an unexpected error. */
