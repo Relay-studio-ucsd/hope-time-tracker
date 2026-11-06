@@ -15,6 +15,8 @@ pub enum SyncErrorCode {
     EmailNotConfirmed,
     UserAlreadyExists,
     WeakPassword,
+    /// The emailed 6-digit code is wrong or has expired.
+    InvalidCode,
     RateLimited,
     /// The refresh token was rejected; the user has to sign in again.
     SessionExpired,

@@ -27,7 +27,7 @@ use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 
 pub use error::{SyncError, SyncErrorCode};
-use http::{Config, HttpRemote, SignUp, TokenSource, Tokens};
+use http::{CodeKind, Config, HttpRemote, SignUp, TokenSource, Tokens};
 
 use crate::db::{now_ms, setting, Db};
 use crate::events;
@@ -46,6 +46,9 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 const TOKEN_MARGIN_MS: i64 = 60_000;
 /// `sync.last_ok_ms` is written at most this often (the in-memory value is always current).
 const LAST_OK_SAVE_MS: i64 = 30_000;
+/// Shortest password accepted when creating an account or resetting one (rebuild-plan 17.3); the
+/// project's own setting is the authority, this only saves a round trip.
+const MIN_PASSWORD_CHARS: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -82,8 +85,16 @@ pub enum SignInOutcome {
     /// This device last synced a different account. Nothing was stored; call again with
     /// `confirm_switch` after asking the user. Local data is then merged into the new account.
     ConfirmSwitch { previous_email: Option<String> },
-    /// Sign-up needs the emailed link clicked before signing in.
+    /// A 6-digit code was emailed; finish with `verify_sign_up`.
     CheckEmail,
+}
+
+/// A password-reset code that was already verified (and so is spent) while the new password has not
+/// been accepted yet; lets the user retry with another password (rebuild-plan 17.3).
+struct PendingReset {
+    email: String,
+    code: String,
+    tokens: Tokens,
 }
 
 struct AuthSession {
@@ -113,6 +124,7 @@ struct Inner {
     config: Option<Config>,
     client: reqwest::Client,
     auth: Mutex<Option<AuthSession>>,
+    pending_reset: Mutex<Option<PendingReset>>,
     runtime: Mutex<Runtime>,
     tx: Mutex<Option<Sender<Msg>>>,
 }
@@ -190,6 +202,7 @@ pub fn init(app: &AppHandle) -> crate::error::Result<()> {
         config,
         client: http::client(),
         auth: Mutex::new(auth),
+        pending_reset: Mutex::new(None),
         runtime: Mutex::new(runtime),
         tx: Mutex::new(None),
     }));
@@ -208,6 +221,13 @@ pub fn notify_local_write(app: &AppHandle) {
     if let Some(sync) = app.try_state::<SyncService>() {
         sync.send(Msg::LocalWrite);
     }
+}
+
+fn check_password(password: &str) -> Result<(), SyncError> {
+    if password.chars().count() < MIN_PASSWORD_CHARS {
+        return Err(SyncError::new(SyncErrorCode::WeakPassword, format!("shorter than {MIN_PASSWORD_CHARS} characters")));
+    }
+    Ok(())
 }
 
 fn backoff(failures: u32) -> Duration {
@@ -272,10 +292,90 @@ impl SyncService {
     }
 
     pub async fn sign_up(&self, email: &str, password: &str, confirm_switch: bool) -> Result<SignInOutcome, SyncError> {
-        match http::sign_up(&self.0.client, self.config()?, email.trim(), password).await? {
+        let cfg = self.config()?;
+        check_password(password)?;
+        match http::sign_up(&self.0.client, cfg, email.trim(), password).await? {
             SignUp::SignedIn(tokens) => self.establish(tokens, confirm_switch),
             SignUp::ConfirmEmail => Ok(SignInOutcome::CheckEmail),
         }
+    }
+
+    /// Finishes a sign-up with the emailed code. The code is spent by a correct answer, so after
+    /// `ConfirmSwitch` the caller continues with a plain `sign_in` (the account can sign in by then).
+    pub async fn verify_sign_up(&self, email: &str, code: &str, confirm_switch: bool) -> Result<SignInOutcome, SyncError> {
+        let tokens = http::verify_code(&self.0.client, self.config()?, CodeKind::SignUp, email.trim(), code.trim()).await?;
+        self.establish(tokens, confirm_switch)
+    }
+
+    pub async fn resend_sign_up_code(&self, email: &str) -> Result<(), SyncError> {
+        http::resend_sign_up_code(&self.0.client, self.config()?, email.trim()).await
+    }
+
+    /// Emails a password-reset code. Succeeds whether or not the address has an account.
+    pub async fn request_password_reset(&self, email: &str) -> Result<(), SyncError> {
+        http::recover(&self.0.client, self.config()?, email.trim()).await
+    }
+
+    /// Verifies the reset code, sets the new password and signs in. After `ConfirmSwitch` the caller
+    /// continues with a plain `sign_in` using the new password.
+    pub async fn reset_password(
+        &self,
+        email: &str,
+        code: &str,
+        new_password: &str,
+        confirm_switch: bool,
+    ) -> Result<SignInOutcome, SyncError> {
+        let cfg = self.config()?;
+        let (email, code) = (email.trim(), code.trim());
+        check_password(new_password)?;
+        // A code verifies only once: reuse the session from an earlier attempt with the same code.
+        let earlier = lock(&self.0.pending_reset).take().filter(|p| p.email == email && p.code == code);
+        let tokens = match earlier {
+            Some(p) => p.tokens,
+            None => http::verify_code(&self.0.client, cfg, CodeKind::Recovery, email, code).await?,
+        };
+        if let Err(e) = http::update_password(&self.0.client, cfg, &tokens.access_token, new_password).await {
+            *lock(&self.0.pending_reset) = Some(PendingReset { email: email.to_owned(), code: code.to_owned(), tokens });
+            return Err(e);
+        }
+        self.establish(tokens, confirm_switch)
+    }
+
+    /// Deletes the signed-in account and everything it stored in the cloud (rebuild-plan 17.4).
+    /// Records on this device stay, and the device forgets the account entirely: the next sign-in,
+    /// to any account, uploads them again without asking about a switch.
+    pub async fn delete_account(&self) -> Result<(), SyncError> {
+        let cfg = self.config()?;
+        let mut force = false;
+        loop {
+            // `access_token` blocks on the refresh request, so it must not run on a runtime thread.
+            let source = self.clone();
+            let token = tauri::async_runtime::spawn_blocking(move || source.access_token(force))
+                .await
+                .map_err(|e| SyncError::new(SyncErrorCode::Server, e.to_string()))??;
+            match http::delete_account(&self.0.client, cfg, &token).await {
+                Err(e) if e.code == SyncErrorCode::SessionExpired && !force => force = true,
+                other => break other?,
+            }
+        }
+        lock(&self.0.auth).take();
+        keychain::delete();
+        {
+            let db = self.0.app.state::<Db>();
+            let conn = db.conn();
+            for key in [USER_ID, EMAIL, LAST_OK, LAST_ERROR] {
+                setting::remove(&conn, key)?;
+            }
+        }
+        {
+            let mut rt = lock(&self.0.runtime);
+            rt.error = None;
+            rt.synced_once = false;
+            rt.last_ok_ms = None;
+            rt.last_ok_saved_ms = 0;
+        }
+        self.emit_status();
+        Ok(())
     }
 
     fn establish(&self, tokens: Tokens, confirm_switch: bool) -> Result<SignInOutcome, SyncError> {
@@ -421,6 +521,8 @@ impl SyncService {
                 self.session_expired(e.clone());
                 Err(SyncError::new(SyncErrorCode::SignedOut, "session expired"))
             }
+            // Signed out (or the account was deleted) while the round was in flight: nothing to report.
+            Err(_) if !self.signed_in() => Err(SyncError::new(SyncErrorCode::SignedOut, "signed out during the round")),
             Err(e) => {
                 let _ = setting::set(&db.conn(), LAST_ERROR, &e.to_string());
                 lock(&self.0.runtime).error = Some(e.clone());

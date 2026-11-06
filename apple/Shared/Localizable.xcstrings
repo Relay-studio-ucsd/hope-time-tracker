@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ and everything it stored in the cloud will be permanently deleted, and other devices will stop syncing. Records on this iPhone stay." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 以及它在云端的全部记录会被永久删除，其他设备也无法再同步。这台 iPhone 上的记录会保留。"
+          }
+        }
+      }
+    },
     "%@ has been running for %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -31,12 +41,32 @@
         }
       }
     },
+    "A new code is on its way to %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新的验证码已发往 %@。"
+          }
+        }
+      }
+    },
     "Account" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "账号"
+          }
+        }
+      }
+    },
+    "Account deleted. Your records stay on this iPhone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号已删除，记录仍保留在这台 iPhone 上。"
           }
         }
       }
@@ -101,6 +131,26 @@
         }
       }
     },
+    "At least 8 characters." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少 8 位。"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回"
+          }
+        }
+      }
+    },
     "Blue" : {
       "localizations" : {
         "zh-Hans" : {
@@ -151,22 +201,12 @@
         }
       }
     },
-    "Check %@ for a confirmation link, then sign in here." : {
+    "Code" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请到 %@ 查收确认邮件，点击链接后回到这里登录。"
-          }
-        }
-      }
-    },
-    "Choose a longer password." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "密码太短，请换一个更长的。"
+            "value" : "验证码"
           }
         }
       }
@@ -191,12 +231,12 @@
         }
       }
     },
-    "Confirm your email first: check your inbox for the link." : {
+    "Confirm" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请先在邮箱里点击确认链接。"
+            "value" : "确认"
           }
         }
       }
@@ -231,6 +271,46 @@
         }
       }
     },
+    "Delete" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        }
+      }
+    },
+    "Delete Account…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除账号…"
+          }
+        }
+      }
+    },
+    "Delete this account?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除这个账号？"
+          }
+        }
+      }
+    },
+    "Deleting removes the account and its cloud data. Records on this iPhone stay." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除账号会清除云端的账号和数据，这台 iPhone 上的记录保留。"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -247,6 +327,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "邮箱"
+          }
+        }
+      }
+    },
+    "Enter the code from the email to finish creating the account." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入邮件里的验证码，完成注册。"
           }
         }
       }
@@ -277,6 +367,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运动类和课表不提醒。"
+          }
+        }
+      }
+    },
+    "Finish creating the account with the code we emailed you." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入邮件里的验证码，完成注册。"
+          }
+        }
+      }
+    },
+    "Forgot Password?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忘记密码？"
           }
         }
       }
@@ -318,6 +428,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hope"
+          }
+        }
+      }
+    },
+    "If %@ has an account, a 6-digit code is on its way." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 %@ 注册过，6 位验证码已在路上。"
           }
         }
       }
@@ -379,6 +499,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建活动"
+          }
+        }
+      }
+    },
+    "New Password" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新密码"
           }
         }
       }
@@ -604,12 +734,42 @@
         }
       }
     },
+    "Resend Code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发送"
+          }
+        }
+      }
+    },
+    "Reset Password" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重设密码"
+          }
+        }
+      }
+    },
     "Resume" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "继续"
+          }
+        }
+      }
+    },
+    "Send Code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送验证码"
           }
         }
       }
@@ -784,6 +944,16 @@
         }
       }
     },
+    "That code is wrong or has expired. Request a new one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证码错误或已过期，请重新发送。"
+          }
+        }
+      }
+    },
     "The watch will remind." : {
       "localizations" : {
         "zh-Hans" : {
@@ -887,6 +1057,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到另一个账号？"
+          }
+        }
+      }
+    },
+    "Use at least 8 characters." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码至少 8 位。"
+          }
+        }
+      }
+    },
+    "We emailed a 6-digit code to %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已向 %@ 发送 6 位验证码。"
+          }
+        }
+      }
+    },
+    "We'll email a code to reset your password." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们会向这个邮箱发送重设密码的验证码。"
           }
         }
       }

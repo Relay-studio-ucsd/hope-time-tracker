@@ -10,6 +10,8 @@ public enum SyncErrorCode: String, Sendable, Codable, Equatable {
     case emailNotConfirmed = "email_not_confirmed"
     case userAlreadyExists = "user_already_exists"
     case weakPassword = "weak_password"
+    /// The emailed 6-digit code is wrong or has expired.
+    case invalidCode = "invalid_code"
     case rateLimited = "rate_limited"
     /// The refresh token was rejected; the user has to sign in again.
     case sessionExpired = "session_expired"

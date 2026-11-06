@@ -55,10 +55,27 @@ pub struct Tokens {
     pub user: User,
 }
 
+#[derive(Debug)]
 pub enum SignUp {
     SignedIn(Tokens),
-    /// The project requires email confirmation; no session until the link is clicked.
+    /// The project requires email confirmation; no session until the emailed code is verified.
     ConfirmEmail,
+}
+
+/// Which emailed code `verify_code` checks (rebuild-plan 17.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CodeKind {
+    SignUp,
+    Recovery,
+}
+
+impl CodeKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            CodeKind::SignUp => "signup",
+            CodeKind::Recovery => "recovery",
+        }
+    }
 }
 
 async fn send(req: RequestBuilder) -> Result<(StatusCode, String), SyncError> {
@@ -92,6 +109,7 @@ fn auth_error(status: StatusCode, body: &str, refreshing: bool) -> SyncError {
             "email_not_confirmed" => SyncErrorCode::EmailNotConfirmed,
             "user_already_exists" | "email_exists" => SyncErrorCode::UserAlreadyExists,
             "weak_password" => SyncErrorCode::WeakPassword,
+            "otp_expired" => SyncErrorCode::InvalidCode,
             _ => SyncErrorCode::Server,
         }
     };
@@ -117,12 +135,84 @@ pub async fn sign_up(client: &Client, cfg: &Config, email: &str, password: &str)
     if !status.is_success() {
         return Err(auth_error(status, &body, false));
     }
-    // With "Confirm email" on, the answer is the new user without a session.
-    if body.contains("\"access_token\"") {
-        Ok(SignUp::SignedIn(parse_tokens(&body)?))
-    } else {
-        Ok(SignUp::ConfirmEmail)
+    parse_sign_up(&body)
+}
+
+fn parse_sign_up(body: &str) -> Result<SignUp, SyncError> {
+    let parsed: Json = serde_json::from_str(body).map_err(|e| SyncError::decode(format!("sign-up response: {e}")))?;
+    if parsed.get("access_token").is_some() {
+        return Ok(SignUp::SignedIn(parse_tokens(body)?));
     }
+    // With "Confirm email" on, the answer is the new user without a session. For an address that is
+    // already registered GoTrue answers 200 with a made-up user (so addresses cannot be probed) and
+    // sends nothing; the one tell is an empty `identities` list.
+    if parsed.get("identities").and_then(Json::as_array).is_some_and(Vec::is_empty) {
+        return Err(SyncError::new(SyncErrorCode::UserAlreadyExists, "sign-up answered with no identities"));
+    }
+    Ok(SignUp::ConfirmEmail)
+}
+
+/// Checks an emailed 6-digit code. A correct one is spent and answers with a session.
+pub async fn verify_code(client: &Client, cfg: &Config, kind: CodeKind, email: &str, code: &str) -> Result<Tokens, SyncError> {
+    let req = auth_request(client, cfg, "verify").json(&json!({ "type": kind.as_str(), "email": email, "token": code }));
+    let (status, body) = send(req).await?;
+    if !status.is_success() {
+        return Err(auth_error(status, &body, false));
+    }
+    parse_tokens(&body)
+}
+
+/// Sends the sign-up code again.
+pub async fn resend_sign_up_code(client: &Client, cfg: &Config, email: &str) -> Result<(), SyncError> {
+    let req = auth_request(client, cfg, "resend").json(&json!({ "type": CodeKind::SignUp.as_str(), "email": email }));
+    let (status, body) = send(req).await?;
+    if !status.is_success() {
+        return Err(auth_error(status, &body, false));
+    }
+    Ok(())
+}
+
+/// Emails a password-reset code. Succeeds whether or not the address has an account.
+pub async fn recover(client: &Client, cfg: &Config, email: &str) -> Result<(), SyncError> {
+    let req = auth_request(client, cfg, "recover").json(&json!({ "email": email }));
+    let (status, body) = send(req).await?;
+    if !status.is_success() {
+        return Err(auth_error(status, &body, false));
+    }
+    Ok(())
+}
+
+/// Sets a new password for the session behind `access_token`.
+pub async fn update_password(client: &Client, cfg: &Config, access_token: &str, password: &str) -> Result<(), SyncError> {
+    let req = client
+        .put(format!("{}/auth/v1/user", cfg.url))
+        .header("apikey", &cfg.anon_key)
+        .bearer_auth(access_token)
+        .json(&json!({ "password": password }));
+    let (status, body) = send(req).await?;
+    if !status.is_success() {
+        return Err(auth_error(status, &body, false));
+    }
+    Ok(())
+}
+
+/// Deletes the account behind `access_token` and all of its rows (`delete_account()` in
+/// `supabase/schema.sql`). A 401 comes back as `SessionExpired` so the caller can refresh and retry.
+pub async fn delete_account(client: &Client, cfg: &Config, access_token: &str) -> Result<(), SyncError> {
+    let req = client
+        .post(format!("{}/rest/v1/rpc/delete_account", cfg.url))
+        .header("apikey", &cfg.anon_key)
+        .bearer_auth(access_token)
+        .json(&json!({}));
+    let (status, body) = send(req).await?;
+    if status == StatusCode::UNAUTHORIZED {
+        return Err(SyncError::new(SyncErrorCode::SessionExpired, "access token rejected"));
+    }
+    if !status.is_success() {
+        let snippet: String = body.chars().take(300).collect();
+        return Err(SyncError::new(SyncErrorCode::Server, format!("HTTP {status}: {snippet}")));
+    }
+    Ok(())
 }
 
 pub async fn refresh(client: &Client, cfg: &Config, refresh_token: &str) -> Result<Tokens, SyncError> {
@@ -207,7 +297,108 @@ impl Remote for HttpRemote<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::{Arc, Mutex};
+
     use super::*;
+
+    #[derive(Debug, Clone)]
+    struct Recorded {
+        method: String,
+        path: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    }
+
+    impl Recorded {
+        fn header(&self, name: &str) -> Option<&str> {
+            self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+        }
+
+        fn json(&self) -> Json {
+            serde_json::from_str(&self.body).unwrap_or(Json::Null)
+        }
+    }
+
+    /// A stand-in for GoTrue / PostgREST on a local port (rebuild-plan 17.6): answers each request
+    /// from `reply` by method and path, one connection per request, and keeps what it received.
+    struct FakeServer {
+        url: String,
+        requests: Arc<Mutex<Vec<Recorded>>>,
+    }
+
+    impl FakeServer {
+        fn start(reply: impl Fn(&str, &str) -> (u16, String) + Send + 'static) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}", listener.local_addr().unwrap());
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let log = requests.clone();
+            std::thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let Ok(mut stream) = stream else { break };
+                    let req = read_request(&mut stream);
+                    let (status, body) = reply(&req.method, &req.path);
+                    log.lock().unwrap().push(req);
+                    let head = if status == 204 {
+                        format!("HTTP/1.1 {status} No Content\r\nConnection: close\r\n\r\n")
+                    } else {
+                        format!(
+                            "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        )
+                    };
+                    let _ = stream.write_all(head.as_bytes());
+                    let _ = stream.write_all(body.as_bytes());
+                }
+            });
+            Self { url, requests }
+        }
+
+        fn config(&self) -> Config {
+            Config { url: self.url.clone(), anon_key: "anon".into() }
+        }
+
+        fn requests(&self) -> Vec<Recorded> {
+            self.requests.lock().unwrap().clone()
+        }
+    }
+
+    fn read_request(stream: &mut TcpStream) -> Recorded {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 1024];
+        let head_end = loop {
+            let n = stream.read(&mut chunk).unwrap();
+            if n == 0 {
+                break buf.len();
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                break i + 4;
+            }
+        };
+        let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
+        let mut lines = head.lines();
+        let mut first = lines.next().unwrap_or("").split(' ');
+        let method = first.next().unwrap_or("").to_owned();
+        let path = first.next().unwrap_or("").to_owned();
+        let headers: Vec<(String, String)> =
+            lines.filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned())).collect();
+        let len: usize = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, v)| v.parse().ok())
+            .unwrap_or(0);
+        let mut body = buf[head_end..].to_vec();
+        while body.len() < len {
+            let n = stream.read(&mut chunk).unwrap();
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..n]);
+        }
+        Recorded { method, path, headers, body: String::from_utf8_lossy(&body).into_owned() }
+    }
 
     #[test]
     fn auth_errors_map_to_codes() {
@@ -220,6 +411,79 @@ mod tests {
         assert_eq!(auth_error(StatusCode::TOO_MANY_REQUESTS, "", false).code, SyncErrorCode::RateLimited);
         assert_eq!(auth_error(s, r#"{"error_code":"refresh_token_not_found"}"#, true).code, SyncErrorCode::SessionExpired);
         assert_eq!(auth_error(StatusCode::BAD_GATEWAY, "<html>", false).code, SyncErrorCode::Server);
+    }
+
+    #[test]
+    fn sign_up_answers_are_told_apart() {
+        let session = r#"{"access_token":"a","token_type":"bearer","expires_in":3600,"refresh_token":"r","user":{"id":"u","email":"e@x.io"}}"#;
+        assert!(matches!(parse_sign_up(session).unwrap(), SignUp::SignedIn(_)));
+        let new_user = r#"{"id":"u","email":"e@x.io","identities":[{"id":"u","provider":"email"}]}"#;
+        assert!(matches!(parse_sign_up(new_user).unwrap(), SignUp::ConfirmEmail));
+        let taken = r#"{"id":"u","email":"e@x.io","identities":[]}"#;
+        assert_eq!(parse_sign_up(taken).unwrap_err().code, SyncErrorCode::UserAlreadyExists);
+        assert_eq!(parse_sign_up("<html>").unwrap_err().code, SyncErrorCode::Decode);
+    }
+
+    #[test]
+    fn account_requests_have_the_agreed_shapes() {
+        let session = r#"{"access_token":"a","token_type":"bearer","expires_in":3600,"refresh_token":"r","user":{"id":"u","email":"e@x.io"}}"#;
+        let server = FakeServer::start(move |method, path| match (method, path) {
+            ("POST", "/auth/v1/verify") => (200, session.to_owned()),
+            ("POST", "/auth/v1/resend") | ("POST", "/auth/v1/recover") => (200, "{}".to_owned()),
+            ("PUT", "/auth/v1/user") => (200, r#"{"id":"u","email":"e@x.io"}"#.to_owned()),
+            ("POST", "/rest/v1/rpc/delete_account") => (204, String::new()),
+            _ => (404, String::new()),
+        });
+        let (client, cfg) = (client(), server.config());
+        tauri::async_runtime::block_on(async {
+            let t = verify_code(&client, &cfg, CodeKind::SignUp, "e@x.io", "123456").await.unwrap();
+            assert_eq!((t.access_token.as_str(), t.user.id.as_str()), ("a", "u"));
+            verify_code(&client, &cfg, CodeKind::Recovery, "e@x.io", "654321").await.unwrap();
+            resend_sign_up_code(&client, &cfg, "e@x.io").await.unwrap();
+            recover(&client, &cfg, "e@x.io").await.unwrap();
+            update_password(&client, &cfg, "a", "longer-password").await.unwrap();
+            delete_account(&client, &cfg, "a").await.unwrap();
+        });
+        let r = server.requests();
+        let lines: Vec<String> = r.iter().map(|r| format!("{} {}", r.method, r.path)).collect();
+        assert_eq!(
+            lines,
+            [
+                "POST /auth/v1/verify",
+                "POST /auth/v1/verify",
+                "POST /auth/v1/resend",
+                "POST /auth/v1/recover",
+                "PUT /auth/v1/user",
+                "POST /rest/v1/rpc/delete_account",
+            ]
+        );
+        assert!(r.iter().all(|r| r.header("apikey") == Some("anon")));
+        assert_eq!(r[0].json(), json!({ "type": "signup", "email": "e@x.io", "token": "123456" }));
+        assert_eq!(r[1].json(), json!({ "type": "recovery", "email": "e@x.io", "token": "654321" }));
+        assert_eq!(r[2].json(), json!({ "type": "signup", "email": "e@x.io" }));
+        assert_eq!(r[3].json(), json!({ "email": "e@x.io" }));
+        assert_eq!(r[4].json(), json!({ "password": "longer-password" }));
+        assert_eq!(r[4].header("authorization"), Some("Bearer a"));
+        assert_eq!(r[5].header("authorization"), Some("Bearer a"));
+    }
+
+    #[test]
+    fn rejected_account_requests_map_to_codes() {
+        let server = FakeServer::start(|_, path| match path {
+            "/auth/v1/verify" => (403, r#"{"code":403,"error_code":"otp_expired","msg":"Token has expired or is invalid"}"#.to_owned()),
+            "/auth/v1/user" => (422, r#"{"code":422,"error_code":"weak_password","msg":"Password should be at least 8 characters."}"#.to_owned()),
+            "/rest/v1/rpc/delete_account" => (401, r#"{"code":"PGRST301","message":"JWT expired"}"#.to_owned()),
+            "/auth/v1/recover" => (429, r#"{"code":429,"error_code":"over_email_send_rate_limit","msg":"For security purposes, you can only request this after 60 seconds."}"#.to_owned()),
+            _ => (500, String::new()),
+        });
+        let (client, cfg) = (client(), server.config());
+        tauri::async_runtime::block_on(async {
+            let code = |r: Result<(), SyncError>| r.unwrap_err().code;
+            assert_eq!(verify_code(&client, &cfg, CodeKind::Recovery, "e@x.io", "000000").await.unwrap_err().code, SyncErrorCode::InvalidCode);
+            assert_eq!(code(update_password(&client, &cfg, "a", "short").await), SyncErrorCode::WeakPassword);
+            assert_eq!(code(delete_account(&client, &cfg, "a").await), SyncErrorCode::SessionExpired);
+            assert_eq!(code(recover(&client, &cfg, "e@x.io").await), SyncErrorCode::RateLimited);
+        });
     }
 
     #[test]

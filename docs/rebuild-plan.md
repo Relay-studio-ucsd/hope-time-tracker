@@ -482,7 +482,7 @@ CREATE TABLE day (                                         -- 每天实际的起
 - 同步五张表：`activity`、`session`、`plan`、`journal`、`day`。列与本地完全相同，另加：
   - `user_id uuid not null default auth.uid()`
   - `server_seq bigint not null`，取自全局序列 `sync_seq`
-- 主键 `(user_id, id)`；`day` 为 `(user_id, date)`。`activity.color` 的 CHECK 与本地一致。无外键。
+- 主键 `(user_id, id)`；`day` 为 `(user_id, date)`。`activity.color` 的 CHECK 与本地一致。表与表之间无外键（`user_id` 指向 `auth.users` 的外键见 17.4）。
 - RLS：四种操作都要求 `user_id = auth.uid()`。
 - BEFORE INSERT OR UPDATE 触发器（每张表）：
   - UPDATE 时若 `(NEW.updated_ms, NEW.device_id) <= (OLD.updated_ms, OLD.device_id)`，返回 OLD（丢弃旧写入）。时间相同时 device_id 大的赢，保证各端结论一致。
@@ -505,7 +505,7 @@ CREATE TABLE day (                                         -- 每天实际的起
 
 ### 12.4 登录与配置
 
-- Supabase Auth，邮箱 + 密码（GoTrue REST：`/auth/v1/signup`、`/auth/v1/token?grant_type=password|refresh_token`）。
+- Supabase Auth，邮箱 + 密码（GoTrue REST：`/auth/v1/signup`、`/auth/v1/token?grant_type=password|refresh_token`）。验证码注册、找回密码、删除账号见第 17 节。
 - refresh token 存系统钥匙串（`keyring` crate）；access token 只在内存。
 - `SUPABASE_URL`、`SUPABASE_ANON_KEY` 在构建时从根目录 `.env`（已 gitignore，另提交 `.env.example`）读入；CI 用仓库 Secrets。没配置时 app 仍完全可用，只是本地模式，同步设置区显示"未配置"。
 - 所有网络请求在 Rust 里发（`reqwest`，rustls）；前端不直接访问 Supabase。
@@ -525,6 +525,20 @@ CREATE TABLE day (                                         -- 每天实际的起
 - 目录 `apple/`，一个 Xcode 工程：iOS app（先做最小版：登录 + 今日概览 + 承载 Watch app）与 watchOS app。Bundle ID `io.github.dan9574.hope.ios`。
 - 两端各自实现 12.3 的协议（URLSession），本地存储用 SwiftData。
 - 手表的登录态由 iPhone 通过 WatchConnectivity 传过去；手表之后直接连 Supabase。
+
+### 12.8 拉取合并成一个请求、后台放慢（草案，确认后再实现；美国版公开前要做完）
+
+问题：12.3 的 pull 是每张表一个 GET，五张表、每 5 秒一轮，一台登录的设备约等于每秒 1 个请求。内测无所谓，公开后撑不住，而桌面端只要开着就一直在轮询。
+
+- 云端加函数 `hope_pull(after jsonb, lim int default 1000) returns jsonb`，`security invoker`（照常走 RLS），`grant execute to authenticated`。
+  - 入参 `after` 是每张表的游标：`{"activity": 120, "session": 3391, …}`，缺的键当 0。客户端照旧先减 50（12.3 的乱序窗口）。
+  - 返回 `{"activity": [...], "session": [...], "plan": [...], "journal": [...], "day": [...]}`，每张表按 `server_seq` 升序、最多 `lim` 行，行的形状与现在 GET 返回的完全一样。
+  - 某张表返回了满 `lim` 行就带着新游标再调一次，直到都不满。
+- 客户端 `POST /rest/v1/rpc/hope_pull`，一轮一个请求。本地游标仍是每表一个（`sync.cursor.<table>`），不迁移。
+- 云端还没有这个函数时（PostgREST 返回 404 `PGRST202`）退回每表一个 GET，本次运行内不再试 RPC。这样先发客户端、后跑 SQL 不会把同步弄断，自架的后端（第 18 节）漏了这一步也能用。
+- 节奏：app 在前台（桌面主窗口可见；iPhone、手表 app 处于活动状态）5 秒一轮，与现在相同；桌面主窗口隐藏、只剩托盘和 Overlay 时 30 秒一轮。本地写入照旧 500ms 后立刻 push，不受影响。
+- push 不变（有改动才发）。表结构、RLS、触发器都不动，已装出去的旧版客户端继续走每表 GET。
+- 测试：两端假服务端加 `hope_pull`，现有的收敛、分页、乱序窗口用例各跑两遍（RPC / 退回 GET）；请求形状两端一致。
 
 ## 13. 阶段 10：课表导入与课表时间的区分
 
@@ -733,3 +747,69 @@ ALTER TABLE session ADD COLUMN break_ack_ms INTEGER;  -- 最近一次在休息�
 
 - 90 分钟、+1 / +2 分钟偏移、预排 4 次、桌面 15 秒轮询都是常量，不进设置。
 - 标题「歇一歇」，正文「「工作」已连续 1 h 30 min」；英文 "Take a break" / "Work has been running for 1 h 30 min"。按钮「暂停」「再来一会儿」/ "Pause" "Keep Going"。时长格式用 `DurationFormat.duration`（与 Today 一致）。
+
+## 16. iPhone v1（待写）
+
+等 iPhone 的视觉方向定下来再写（issue #15）：四个 Tab 与每页内容、今天按起床 / 睡觉日、翻看过去的天。
+
+## 17. 账号体系（2026-11-06 定）
+
+公开发布前账号要补三件事：注册要验证邮箱、忘了密码能找回、能在 app 里删除账号（App Store 对有注册功能的 app 的硬性要求）。三端共用同一套请求。
+
+### 17.1 范围
+
+- 登录方式只有邮箱 + 密码。不做 Apple / Google 登录：App Store 只在提供了第三方登录时才要求同时提供 Apple 登录；加了之后 Windows 端还要另做一套网页授权。
+- 注册和找回都用邮件里的 **6 位验证码**，不用链接：桌面和手机都没有能接住回跳链接的页面（12.4 时代点链接会落到一个报错页）。
+- 入口在桌面「设置 → 同步」和 iPhone 账号页。手表不做注册 / 找回 / 删号，登录态照旧由 iPhone 交接。
+- 不做：改邮箱；已登录状态下改密码（走一遍找回即可）。
+
+### 17.2 Supabase 后台（用户操作，写进 `supabase/README.md`）
+
+- Authentication → Email：Confirm email 开；最短密码 8；验证码有效期 600 秒；重发间隔 60 秒。
+- 邮件模板 Confirm signup 与 Reset password 的正文改为显示 `{{ .Token }}`，不放链接。
+- 自定义 SMTP（Resend，发件域用自己的域名）。自带邮件每小时只发几封，公开注册会卡住。
+- SQL Editor 重新执行 `supabase/schema.sql`（带上 17.5 的函数和外键）。
+
+### 17.3 请求（Rust `sync/http.rs` 与 Swift `Sync/Supabase.swift` 逐条一致）
+
+| 动作 | 请求 | 结果 |
+|---|---|---|
+| 注册 | `POST /auth/v1/signup` `{email, password}` | 带 `access_token` = 项目没开确认，直接登录；否则进入输入验证码。返回的用户 `identities` 是空数组 = 邮箱已注册（GoTrue 为防枚举不报错），按 `user_already_exists` 处理 |
+| 验证注册 | `POST /auth/v1/verify` `{type: "signup", email, token}` | 会话，按 12.4 登录 |
+| 重发注册验证码 | `POST /auth/v1/resend` `{type: "signup", email}` | |
+| 找回密码 | `POST /auth/v1/recover` `{email}` | 邮箱不存在也返回成功 |
+| 重设密码 | `POST /auth/v1/verify` `{type: "recovery", email, token}`，再 `PUT /auth/v1/user` `{password}`（Bearer） | 会话，按 12.4 登录 |
+| 删除账号 | `POST /rest/v1/rpc/delete_account`（Bearer） | 204 |
+
+- 验证码只能用一次。重设密码时验证通过后把这次的会话留在内存里（按邮箱 + 验证码）；改密码这一步失败（比如密码太弱）用户换一个密码重试时不再验证。
+- 注册和重设前客户端先检查密码长度 ≥ 8，不够直接报 `weak_password`，不发请求。
+- 验证后发现这台设备上次同步的是另一个账号：照 12.4 弹确认；确认后用邮箱 + 密码走一次普通登录（验证码已经用掉，账号此时已可登录）。
+- 登录时遇到 `email_not_confirmed`（注册到一半关掉了 app）：直接进入输入验证码，可以重发。
+- 新增错误码 `invalid_code`（GoTrue 的 `otp_expired`：验证码错误或已过期）。
+
+### 17.4 删除账号
+
+- 云端函数 `delete_account()`：`security definer`、`search_path = ''`，只 `grant execute to authenticated`。删掉 `auth.uid()` 在五张表里的所有行，再删 `auth.users` 里这一行（它的会话、刷新令牌随之删除）。未登录调用报错。
+- 五张表的 `user_id` 加外键 → `auth.users(id) on delete cascade`（`not valid`，不检查已有的行）。原因：账号删除后，别的设备手里的 access token 最长还有 1 小时有效，没有外键它们还能继续往里写，留下没有主人的数据。有了外键这些写入会被拒绝。这是 12.1「无外键」的唯一例外（表与表之间仍然没有外键）。
+- 客户端：确认对话框写明后果（云端的账号和全部记录永久删除、其他设备不能再同步、这台设备上的记录保留）→ 调 RPC → 本机等同退出登录，并清掉 `sync.user_id` / `sync.email` / `sync.last_ok_ms`，这样之后登录任何账号都不会再问「切换账号」，本机记录在下次登录时全部重新上传。iPhone 同时通知手表退出。
+- 其他设备：刷新令牌已失效，下次刷新时显示「登录已过期」；本地记录都在。
+
+### 17.5 界面
+
+- 桌面「设置 → 同步」未登录时四种状态：邮箱 + 密码（多一个「忘记密码？」）；输入验证码（注册后）；填邮箱发验证码（找回）；验证码 + 新密码。验证码页都有「重新发送」和「返回」。登录后多一行「删除账号…」。
+- iPhone 账号页同样四种状态和「删除账号」；验证码输入框用 `.oneTimeCode`，系统会从邮件 / 短信里自动提示。
+- 文案：桌面 `sync.*`（`zh-CN` / `en`），Apple `Localizable.xcstrings`。
+
+### 17.6 测试
+
+- Rust：本地起一个只认这几条路径的假 GoTrue（`std::net`，不加依赖），断言每个请求的方法、路径、头、JSON；错误码映射。
+- Swift：`FakeHTTP` 断言同样的请求形状；`SyncService` 走通验证注册、重设密码（含改密码失败后重试不再验证）、删号后本地状态。
+
+## 18. 发布范围：先美国版，再国内版（2026-11-06 定）
+
+- **美国版（先做）**：App Store 只勾美国。Supabase 项目放美国西部区域，公开前升 Pro（免费档闲置会被暂停）。欧洲和英国先不上：要声明经营者身份、满足 GDPR 的条款与代表人要求，而以后要加只是在 App Store Connect 里多勾几个地区，不用改代码。
+- **国内版（第二个版本）**：不是多勾一个地区，是另一套部署。Supabase 云没有大陆区域、从大陆访问不稳定，大陆上架还要 ICP 备案。做法是在大陆的云上自架 Supabase，同一份代码换构建配置里的服务器地址和密钥。两边账号不通，搬数据靠 3.3 的 JSON 导入导出。
+- 为了国内版以后便宜，现在守住两条：
+  1. 客户端只用 GoTrue、PostgREST 和 `supabase/schema.sql` 里的 SQL（自架版都有），不用只有 Supabase 云才有的功能。
+  2. 服务器地址和密钥只出现在构建配置里（`.env` / `Supabase.generated.xcconfig`），代码里不写死。
+- 国内版的登录方式（多半是手机号 + 短信）到时再定；届时只换第 17 节的注册 / 找回这一层，同步协议不动。
